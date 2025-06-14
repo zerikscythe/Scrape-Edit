@@ -1,8 +1,6 @@
 # ScrapeEdit
 
-**ScrapeEdit** is a powerful Windows desktop application for managing, scraping, and editing metadata and media for game ROM libraries.  
-Designed for **Batocera**, **EmulationStation**, and other frontends that use `gamelist.xml` files, ScrapeEdit combines intuitive UI with  
-deep customization, caching, and batch processing features.
+**ScrapeEdit** is a powerful Windows desktop application for managing, scraping, and editing metadata and media for game ROM libraries. Designed for **Batocera**, **EmulationStation**, and other frontends that use `gamelist.xml` files, ScrapeEdit combines intuitive UI with deep customization, caching, and batch processing features.
 
 ---
 
