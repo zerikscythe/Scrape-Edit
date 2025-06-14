@@ -1,0 +1,38 @@
+ToDo List:
+
+screenscraper.fr
+	-We need to edit the download settings to account for all possible options
+	-we need to set backup options if the primary dosent exist
+	-We need to add in the backup options logic when moving the images
+	-hardcode in the dev SS login info and purge it from the cached xml files then re-add them if using cached data
+		(maybe we encrypt the xml files?)
+	
+	Scraping:
+		Saving the updated gamelist is broken
+		When scraping folders as a Rom, some games have no "ROM" info in the xml reply, need to add that to standardize workflow
+		example:
+				<Data>
+					<jeu>
+						<rom> <--- Add this entry if it dosent exist w/ the romfilename!
+							<romfilename>Filename.ext</romfilename>
+						</rom>
+					</jeu>
+				</Data>
+	
+From the Main UI 
+	- UI is painfully slow when loading large libraries of roms. Consider lazy loading, or cache the file structure on 1st load for faster indexing subsuqent uses
+	- we need to fix / remove some options (mostly in the toolpanel -> Scrape)
+	- Add a panel that blocks the viewable meta data or add the data to a panel?
+	- Redo the Manual/Video labels as imageboxes
+	- setup the hash found label and show values if present
+	- figure out how to scale everything if we stretch the window
+	- Add meta data for the consoles like we do the games 
+	- Create a new variable for a .GameList to be stored on the console node like we do a scraped .Game on the game nodes? (would replace the dictionary)
+	- When in Edit mode make shown pics able to be deleted.
+	- Add blank picture box to upload custom images
+	
+From the Context Menu
+	- Fix the scrape options to do multi if multiple are selected	-Done (i think)
+	- Fix Delete File, Rename File, Delete Cache - add to main UI
+	- Add funtion in rebuild to do multiple files
+	
