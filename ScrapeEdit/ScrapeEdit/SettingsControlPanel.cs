@@ -13,9 +13,12 @@ namespace ScrapeEdit
             this.ssa = ssa;
             InitializeComponent();
             SetupHandlers_Download();
-            ProcessChecks_Download();
             SetupHandlers_GameList();
+
+            ProcessChecks_Download();
             ProcessValues_GameList();
+
+
             Setup_Global();
             SetupHandlers_Scrape();
             ProcessValues_Scrape();
@@ -204,15 +207,9 @@ namespace ScrapeEdit
             }
 
             cb_GLS_MainImage.Items.AddRange(sortedMainThumbOptions);
-
-            //if selection dosent exist, set to default
-            if (!sortedMainThumbOptions.Contains(GameListSettings.MainImage))
-                GameListSettings.MainImage = sortedMainThumbOptions[0];
             cb_GLS_MainImage.Text = GameListSettings.MainImage;
 
             cb_GLS_Thumb.Items.AddRange(sortedMainThumbOptions);
-            if (!sortedMainThumbOptions.Contains(GameListSettings.Thumbnail))
-                GameListSettings.Thumbnail = sortedMainThumbOptions[0]; 
             cb_GLS_Thumb.Text = GameListSettings.Thumbnail;
 
         }
@@ -230,9 +227,6 @@ namespace ScrapeEdit
             }
 
             cb_GLS_Marquee.Items.AddRange(sortedMarqueeOptions);
-            if(!sortedMarqueeOptions.Contains(GameListSettings.Marquee))
-                GameListSettings.Marquee = sortedMarqueeOptions[0];
-
             cb_GLS_Marquee.Text = GameListSettings.Marquee;
         }
         void UpdateVideo()
@@ -248,9 +242,6 @@ namespace ScrapeEdit
             }
 
             cb_GLS_Video.Items.AddRange(sortedVideoOptions);
-            if (!sortedVideoOptions.Contains(GameListSettings.Video))
-                GameListSettings.Video = sortedVideoOptions[0];
-
             cb_GLS_Video.Text = GameListSettings.Video;
         }
 

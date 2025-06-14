@@ -128,7 +128,7 @@ namespace ScrapeEdit
                 File.Exists(originalCachePath) &&
                 AgeOfCachedData(originalCachePath) <= 30)
             {
-                xmlData = File.ReadAllText(originalCachePath);
+                string loadedXml = File.ReadAllText(originalCachePath);
                 downloadMedia = false;
             }
             else
@@ -206,7 +206,7 @@ namespace ScrapeEdit
             }
 
             xmlData = SetRomNameInXML(doc, originalName, scrapedName);
-
+            
             using (var writer = XmlWriter.Create(originalCachePath, new XmlWriterSettings
             {
                 Indent = true,
@@ -306,8 +306,13 @@ namespace ScrapeEdit
         )
         {
             string relativeXml = node.Tag_ConsoleRomPath.TrimStart('\\', '/') + ".xml";
+            string oldFileNamePath = Path.Combine(seRomDir, node.Tag_ConsoleName, oldFilename + ".xml");
+
             string xmlOutputPath = Path.Combine(seRomDir, node.Tag_ConsoleName, relativeXml);
             Directory.CreateDirectory(Path.GetDirectoryName(xmlOutputPath));
+
+            if (File.Exists(oldFileNamePath))
+                File.Delete(oldFileNamePath);
 
             XmlDocument doc = new XmlDocument();
             doc.LoadXml(xmlData);

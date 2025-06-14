@@ -15,6 +15,23 @@ namespace ScrapeEdit
     ////    }
     /// Or overrid the values below directly.
 
+    public static class ObfuscateDevCredentials
+    {
+        public static string Obfuscate(string xmlData)
+        {
+            return xmlData
+                .Replace(_DEV_KEY._devid,       "#Secret1")
+                .Replace(_DEV_KEY._devpassword, "#Secret2");
+                //.Replace(_DEV_KEY._softname, "_softname");
+        }
+        public static string DeObfuscate(string xmlData)
+        {
+            return xmlData
+                .Replace("#Secret1", _DEV_KEY._devid)
+                .Replace("#Secret2", _DEV_KEY._devpassword);
+                //.Replace("_softname", _DEV_KEY._softname);
+        }
+    }
 
     public class ScreenScraperApi
     {
@@ -73,8 +90,9 @@ namespace ScrapeEdit
                 var response = httpClient.GetAsync(url).Result;
 
                 response.EnsureSuccessStatusCode(); // Throws exception if the status code is not 2xx
-
-                return response.Content.ReadAsStringAsync().Result; // Return the XML data
+                string replyData = response.Content.ReadAsStringAsync().Result; 
+                return ObfuscateDevCredentials.Obfuscate(replyData); // Return the XML data obfuscated
+                //return response.Content.ReadAsStringAsync().Result; // Return the XML data
             }
             catch (HttpRequestException ex) when (ex.Message.Contains("404"))
             {

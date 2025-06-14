@@ -44,8 +44,11 @@ namespace ScrapeEdit
 
                 InitializeTreeViewLoading();
 
-                //for testing
-                this.devModeOffToolStripMenuItem_Click(sender, e); // Ensure dev mode is on after loading
+            //for testing
+            testCodeToolStripMenuItem.Visible = false;
+            devModeOffToolStripMenuItem.Visible = false;
+            devModeOffToolStripMenuItem.Enabled = false;
+                //this.devModeOffToolStripMenuItem_Click(sender, e); // Ensure dev mode is on after loading
         }
         private async void InitializeTreeViewLoading()
         {

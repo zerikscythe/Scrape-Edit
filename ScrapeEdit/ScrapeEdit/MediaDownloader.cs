@@ -27,6 +27,7 @@ public class MediaDownloader
         try
         {
             var doc = new XmlDocument();
+            xmlData = ObfuscateDevCredentials.DeObfuscate(xmlData);
             doc.LoadXml(xmlData);
 
             var mediaNodes = doc.SelectNodes("//jeu/medias/media")
