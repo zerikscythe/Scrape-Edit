@@ -79,5 +79,15 @@ namespace ScrapeEdit.Properties {
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
+        /// </summary>
+        internal static System.Drawing.Icon xml_Wiz {
+            get {
+                object obj = ResourceManager.GetObject("xml_Wiz", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
     }
 }
