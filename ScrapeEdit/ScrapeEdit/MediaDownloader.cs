@@ -2,27 +2,15 @@
 using ScrapeEdit;
 using System.Xml;
 
-public class MediaDownloader
+public static class MediaDownloader
 {
     public static async Task DownloadMediaAsync(
         TreeNodeDetail treenode,
-        string seDir,
         string xmlData,
         List<string> mediaTypesToDownload,
-        CancellationToken token,
-        string oldFilename
+        CancellationToken token
     )
     {
-        // ⬇️ 1) Purge any leftover media from the *old* filename  
-        if (!string.IsNullOrEmpty(oldFilename)
-            && !oldFilename.Equals(treenode.FileName, StringComparison.OrdinalIgnoreCase))
-        {
-            GameListManager.PurgeOldMediaFiles(treenode, oldFilename);
-        }
-
-        // ⬇️ 2) Purge any existing media for the *new* filename  
-        GameListManager.PurgeOldMediaFiles(treenode, treenode.FileName);
-
         // Now proceed with your existing download logic...
         try
         {
@@ -62,7 +50,8 @@ public class MediaDownloader
                 string format = selected.Attributes["format"]?.Value ?? "bin";
 
                 downloadTasks.Add(
-                    DownloadAndSaveMediaAsync(url, type, format, seDir, treenode, token)
+                    DownloadAndSaveMediaAsync(url, type, format, 
+                    treenode, token)
                 );
             }
 
@@ -76,32 +65,44 @@ public class MediaDownloader
 
     private static readonly HttpClient _httpClient = new HttpClient();
 
-    private static async Task DownloadAndSaveMediaAsync(
+    public static async Task DownloadAndSaveMediaAsync(
     string url,
     string type,
     string format,
-    string baseFolderSE,
-    TreeNodeDetail node,
+    TreeNodeDetail node = null,
     CancellationToken ct = default)
     {
         try
         {
-            string folderPath = string.IsNullOrEmpty(node.Tag_SubDirPath)
-                ? Path.Combine(baseFolderSE, node.Tag_ConsoleName, type)
-                : Path.Combine(baseFolderSE, node.Tag_ConsoleName, node.Tag_SubDirPath, type);
+            string folderPath = "";
+
+            if (!node.isConsole)
+            {
+                folderPath = string.IsNullOrEmpty(node.Tag_SubDirPath)
+                ? Path.Combine(SessionSettings.SEDirectory_ROM, node.Tag_ConsoleName, type)
+                : Path.Combine(SessionSettings.SEDirectory_ROM, node.Tag_ConsoleName, node.Tag_SubDirPath, type);
+            }
+            if (node.isConsole)
+            {
+                folderPath = Path.Combine(SessionSettings.SettingsFolder + "\\Cache\\Consoles\\"+node.Tag_ConsoleName);
+            }
 
             Directory.CreateDirectory(folderPath);
 
             using var response = await _httpClient.GetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
             {
-                //Console.WriteLine($"[MediaDownloader] Failed to GET {url}: {response.StatusCode}");
                 return;
             }
 
             var mediaData = await response.Content.ReadAsByteArrayAsync(ct);
 
-            string baseFileName = $"{node.FileName}-{type}.{format}";
+            string baseFileName = "";
+            if(node.isConsole)
+                baseFileName = $"{node.Tag_ConsoleName}-{type}.{format}";
+            else
+                baseFileName = $"{node.FileName}-{type}.{format}";
+
             string filePath = Path.Combine(folderPath, baseFileName);
 
             if (File.Exists(filePath))
@@ -111,26 +112,21 @@ public class MediaDownloader
 
                 if (string.Equals(existingCrc, downloadedCrc, StringComparison.OrdinalIgnoreCase))
                 {
-                    //Console.WriteLine($"[MediaDownloader] Skipped identical: {filePath}");
                     return;
                 }
                 else
                 {
-                    //Console.WriteLine($"[MediaDownloader] Conflict detected (but alt ignored): {filePath}");
                     return; // ❌ Skip — don’t write a conflicting file or alt
                 }
             }
 
             await File.WriteAllBytesAsync(filePath, mediaData, ct);
-            //Console.WriteLine($"[MediaDownloader] Saved: {filePath}");
         }
         catch (OperationCanceledException)
         {
-            //Console.WriteLine($"[MediaDownloader] Download cancelled: {url}");
         }
         catch (Exception ex)
         {
-            //Console.WriteLine($"[MediaDownloader] Error downloading {url}: {ex}");
         }
     }
 

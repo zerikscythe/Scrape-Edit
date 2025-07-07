@@ -29,9 +29,6 @@
             // Create the M3U file
             using (StreamWriter file = new StreamWriter(m3uFullPath))
             {
-                // Write the header
-                //file.WriteLine("#EXTM3U");
-                // Write the game files
                 foreach (string gameFile in M3USettings.GameFiles)
                 {
                     file.WriteLine(gameFile);

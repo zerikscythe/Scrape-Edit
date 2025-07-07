@@ -70,6 +70,7 @@ namespace ScrapeEdit
             lbl_SSL_Password = new Label();
             btn_SSL_LoginTest = new Button();
             gb_SCP_Login = new GroupBox();
+            btn_SSL_Save = new Button();
             lbl_SSL_TestResult = new Label();
             cb_GLS_MainImage = new ComboBox();
             cb_GLS_Thumb = new ComboBox();
@@ -92,7 +93,6 @@ namespace ScrapeEdit
             lbl_DIR_Root = new Label();
             btn_SCP_Cache = new Button();
             btn_DIR_Root = new Button();
-            btn_SSL_Save = new Button();
             gb_SCP_Download.SuspendLayout();
             gb_SCP_Scrape.SuspendLayout();
             gb_SCP_Login.SuspendLayout();
@@ -261,7 +261,7 @@ namespace ScrapeEdit
             chk_DLS_box_2d.Location = new Point(6, 300);
             chk_DLS_box_2d.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_2d.Name = "chk_DLS_box_2d";
-            chk_DLS_box_2d.Size = new Size(65, 19);
+            chk_DLS_box_2d.Size = new Size(64, 19);
             chk_DLS_box_2d.TabIndex = 15;
             chk_DLS_box_2d.Text = "box-2D";
             chk_DLS_box_2d.UseVisualStyleBackColor = true;
@@ -272,7 +272,7 @@ namespace ScrapeEdit
             chk_DLS_box_2d_side.Location = new Point(6, 320);
             chk_DLS_box_2d_side.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_2d_side.Name = "chk_DLS_box_2d_side";
-            chk_DLS_box_2d_side.Size = new Size(91, 19);
+            chk_DLS_box_2d_side.Size = new Size(90, 19);
             chk_DLS_box_2d_side.TabIndex = 16;
             chk_DLS_box_2d_side.Text = "box-2D-side";
             chk_DLS_box_2d_side.UseVisualStyleBackColor = true;
@@ -283,7 +283,7 @@ namespace ScrapeEdit
             chk_DLS_box_2d_back.Location = new Point(6, 340);
             chk_DLS_box_2d_back.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_2d_back.Name = "chk_DLS_box_2d_back";
-            chk_DLS_box_2d_back.Size = new Size(95, 19);
+            chk_DLS_box_2d_back.Size = new Size(94, 19);
             chk_DLS_box_2d_back.TabIndex = 17;
             chk_DLS_box_2d_back.Text = "box-2D-back";
             chk_DLS_box_2d_back.UseVisualStyleBackColor = true;
@@ -294,7 +294,7 @@ namespace ScrapeEdit
             chk_DLS_box_texture.Location = new Point(6, 360);
             chk_DLS_box_texture.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_texture.Name = "chk_DLS_box_texture";
-            chk_DLS_box_texture.Size = new Size(88, 19);
+            chk_DLS_box_texture.Size = new Size(86, 19);
             chk_DLS_box_texture.TabIndex = 18;
             chk_DLS_box_texture.Text = "box-texture";
             chk_DLS_box_texture.UseVisualStyleBackColor = true;
@@ -305,7 +305,7 @@ namespace ScrapeEdit
             chk_DLS_box_3d.Location = new Point(6, 380);
             chk_DLS_box_3d.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_3d.Name = "chk_DLS_box_3d";
-            chk_DLS_box_3d.Size = new Size(65, 19);
+            chk_DLS_box_3d.Size = new Size(64, 19);
             chk_DLS_box_3d.TabIndex = 19;
             chk_DLS_box_3d.Text = "box-3D";
             chk_DLS_box_3d.UseVisualStyleBackColor = true;
@@ -316,7 +316,7 @@ namespace ScrapeEdit
             chk_DLS_mixrbv1.Location = new Point(6, 400);
             chk_DLS_mixrbv1.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_mixrbv1.Name = "chk_DLS_mixrbv1";
-            chk_DLS_mixrbv1.Size = new Size(69, 19);
+            chk_DLS_mixrbv1.Size = new Size(68, 19);
             chk_DLS_mixrbv1.TabIndex = 20;
             chk_DLS_mixrbv1.Text = "mixrbv1";
             chk_DLS_mixrbv1.UseVisualStyleBackColor = true;
@@ -327,7 +327,7 @@ namespace ScrapeEdit
             chk_DLS_mixrbv2.Location = new Point(6, 420);
             chk_DLS_mixrbv2.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_mixrbv2.Name = "chk_DLS_mixrbv2";
-            chk_DLS_mixrbv2.Size = new Size(69, 19);
+            chk_DLS_mixrbv2.Size = new Size(68, 19);
             chk_DLS_mixrbv2.TabIndex = 21;
             chk_DLS_mixrbv2.Text = "mixrbv2";
             chk_DLS_mixrbv2.UseVisualStyleBackColor = true;
@@ -530,6 +530,16 @@ namespace ScrapeEdit
             gb_SCP_Login.TabStop = false;
             gb_SCP_Login.Text = "Login Settings";
             // 
+            // btn_SSL_Save
+            // 
+            btn_SSL_Save.Location = new Point(196, 129);
+            btn_SSL_Save.Name = "btn_SSL_Save";
+            btn_SSL_Save.Size = new Size(58, 29);
+            btn_SSL_Save.TabIndex = 6;
+            btn_SSL_Save.Text = "Save";
+            btn_SSL_Save.UseVisualStyleBackColor = true;
+            btn_SSL_Save.Click += btn_SSL_Save_Click;
+            // 
             // lbl_SSL_TestResult
             // 
             lbl_SSL_TestResult.AutoSize = true;
@@ -600,7 +610,7 @@ namespace ScrapeEdit
             lbl_GLS_Thumb.AutoSize = true;
             lbl_GLS_Thumb.Location = new Point(6, 61);
             lbl_GLS_Thumb.Name = "lbl_GLS_Thumb";
-            lbl_GLS_Thumb.Size = new Size(64, 15);
+            lbl_GLS_Thumb.Size = new Size(65, 15);
             lbl_GLS_Thumb.TabIndex = 7;
             lbl_GLS_Thumb.Text = "Thumbnail";
             // 
@@ -707,7 +717,7 @@ namespace ScrapeEdit
             btn_DIR_AppDir.Name = "btn_DIR_AppDir";
             btn_DIR_AppDir.Size = new Size(114, 23);
             btn_DIR_AppDir.TabIndex = 4;
-            btn_DIR_AppDir.Text = "AppSettings Dir";
+            btn_DIR_AppDir.Text = "Open Settings Dir";
             btn_DIR_AppDir.UseVisualStyleBackColor = true;
             btn_DIR_AppDir.Click += btn_DIR_AppDir_Click;
             // 
@@ -735,7 +745,7 @@ namespace ScrapeEdit
             btn_SCP_Cache.Name = "btn_SCP_Cache";
             btn_SCP_Cache.Size = new Size(75, 23);
             btn_SCP_Cache.TabIndex = 1;
-            btn_SCP_Cache.Text = "Cache Dir";
+            btn_SCP_Cache.Text = "Settings Dir";
             btn_SCP_Cache.UseVisualStyleBackColor = true;
             btn_SCP_Cache.Click += btn_DIR_SE_Click;
             // 
@@ -748,16 +758,6 @@ namespace ScrapeEdit
             btn_DIR_Root.Text = "ROMs Dir";
             btn_DIR_Root.UseVisualStyleBackColor = true;
             btn_DIR_Root.Click += btn_DIR_Root_Click;
-            // 
-            // btn_SSL_Save
-            // 
-            btn_SSL_Save.Location = new Point(196, 129);
-            btn_SSL_Save.Name = "btn_SSL_Save";
-            btn_SSL_Save.Size = new Size(58, 29);
-            btn_SSL_Save.TabIndex = 6;
-            btn_SSL_Save.Text = "Save";
-            btn_SSL_Save.UseVisualStyleBackColor = true;
-            btn_SSL_Save.Click += btn_SSL_Save_Click;
             // 
             // SettingsControlPanel
             // 

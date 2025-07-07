@@ -100,5 +100,32 @@
             MoveListBoxItem(lb_M3U_gamefiles, -1);
             UpdateFileNameFromSelection();
         }
+
+        private void btn_M3U_Delete_Click(object sender, EventArgs e)
+        {
+            //get selected item index(s)
+            int[] selectedIndices = lb_M3U_gamefiles.SelectedIndices.Cast<int>().ToArray();
+            //remove selected items from the listbox
+            foreach (int index in selectedIndices.OrderByDescending(i => i))
+            {
+                lb_M3U_gamefiles.Items.RemoveAt(index);
+            }
+        }
+
+        private void btn_M3U_Add_Click(object sender, EventArgs e)
+        {
+            //add items to listbox from tb_M3U_FileName
+            string newItem = tb_M3U_ManulEntry.Text.Trim(); // Get the trimmed text from the manual entry textbox
+            if (!string.IsNullOrEmpty(newItem) && !lb_M3U_gamefiles.Items.Contains(newItem))
+            {
+                lb_M3U_gamefiles.Items.Add(newItem);
+                tb_M3U_FileName.Clear(); // Clear the text box after adding
+                UpdateFileNameFromSelection(); // Update the file name based on the new selection
+            }
+            else
+            {
+                MessageBox.Show("Please enter a valid file name that is not already in the list.", "Invalid Entry", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
     }
 }

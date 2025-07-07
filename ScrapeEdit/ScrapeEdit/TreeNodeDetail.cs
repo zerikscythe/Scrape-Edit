@@ -73,10 +73,8 @@ namespace ScrapeEdit
                     return null;
             }
         }
-
         public string Tag_Hash { get; set; } = null; // hash of the file
         public bool Tag_HashMatchFound { get; set; } = false; // if the hash was found in the database
-
         public string FileNameFull
         {
             get
@@ -87,7 +85,6 @@ namespace ScrapeEdit
                     return null;
             }
         }
-
         public string FileName
         {
             get
@@ -101,6 +98,32 @@ namespace ScrapeEdit
         public bool isConsole { get; set; } = false;
         public bool isSubDir { get; set; } = false;
 
+        public int Tag_RomCount
+        {
+            get
+            {
+                return CountRomNodesRecursive(this);
+            }
+        }
+
+        private int CountRomNodesRecursive(TreeNode node)
+        {
+            int count = 0;
+
+            foreach (TreeNode child in node.Nodes)
+            {
+                if (child is TreeNodeDetail detail)
+                {
+                    if (!detail.isSubDir && !detail.isConsole)
+                        count++;
+                    count += CountRomNodesRecursive(detail); // recurse into children
+                }
+            }
+
+            return count;
+        }
+
+
         ScrapedGame? _game;
         public ScrapedGame Game 
         {
@@ -112,6 +135,21 @@ namespace ScrapeEdit
                 else
                     _game = value ;
             } 
+        }
+
+        ScrapedConsole? _console;
+        public ScrapedConsole Console
+        {
+            get { return _console; }
+            set
+            {
+                if (this.isConsole)
+                {
+                    _console = value;
+                }
+                else
+                    return;
+            }
         }
 
         public TreeNodeDetail() : base()

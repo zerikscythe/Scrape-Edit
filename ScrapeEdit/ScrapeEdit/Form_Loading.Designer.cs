@@ -36,6 +36,7 @@
 
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form_Loading));
             lblStatus = new Label();
             progressBar = new ProgressBar();
             lblFileProgress = new Label();
@@ -44,50 +45,40 @@
             // 
             // lblStatus
             // 
-            lblStatus.AutoSize = true;
-            lblStatus.Location = new Point(12, 9);
+            resources.ApplyResources(lblStatus, "lblStatus");
             lblStatus.Name = "lblStatus";
-            lblStatus.Size = new Size(70, 15);
-            lblStatus.TabIndex = 0;
-            lblStatus.Text = "Initializing...";
             // 
             // progressBar
             // 
-            progressBar.Location = new Point(12, 30);
+            resources.ApplyResources(progressBar, "progressBar");
             progressBar.Name = "progressBar";
-            progressBar.Size = new Size(360, 23);
-            progressBar.TabIndex = 1;
             // 
             // lblFileProgress
             // 
-            lblFileProgress.AutoSize = true;
-            lblFileProgress.Location = new Point(12, 60);
+            resources.ApplyResources(lblFileProgress, "lblFileProgress");
             lblFileProgress.Name = "lblFileProgress";
-            lblFileProgress.Size = new Size(87, 15);
-            lblFileProgress.TabIndex = 2;
-            lblFileProgress.Text = "Game Files: 0/0";
             // 
             // progressBarFiles
             // 
-            progressBarFiles.Location = new Point(12, 80);
+            resources.ApplyResources(progressBarFiles, "progressBarFiles");
             progressBarFiles.Name = "progressBarFiles";
-            progressBarFiles.Size = new Size(360, 23);
-            progressBarFiles.TabIndex = 3;
             // 
             // Form_Loading
             // 
-            ClientSize = new Size(384, 115);
-            ControlBox = false;
+            resources.ApplyResources(this, "$this");
             Controls.Add(lblStatus);
             Controls.Add(progressBar);
             Controls.Add(lblFileProgress);
             Controls.Add(progressBarFiles);
             FormBorderStyle = FormBorderStyle.FixedDialog;
+            Icon = Properties.Resources.xml_Wiz;
+            MaximizeBox = false;
+            MinimizeBox = false;
             Name = "Form_Loading";
-            StartPosition = FormStartPosition.CenterScreen;
-            Text = "Loading Files...";
+            SizeGripStyle = SizeGripStyle.Hide;
             ResumeLayout(false);
             PerformLayout();
+            Text = "   ...Loading Files...";
         }
 
         #endregion

@@ -6,7 +6,7 @@
         private Label lbl_OverallStatus;
         private ProgressBar pb_Overall;
         private Label lbl_Summary;
-        private Button btn_Cancel;
+        private Button btn_CC;
 
         private int totalGames;
         private int completedGames;
@@ -25,6 +25,10 @@
 
         private void SetupUI()
         {
+            //this.MaximizeBox = false;
+            //this.MinimizeBox = false;
+            this.ControlBox = false;
+
             Text = "Scraping Progress";
             Width = 475;
             Height = 650;
@@ -79,8 +83,8 @@
             };
             Controls.Add(pb_Overall);
 
-            // Cancel button
-            btn_Cancel = new Button
+            // Cancel/Close button
+            btn_CC= new Button
             {
                 Text = "Cancel",
                 Top = 520,
@@ -88,12 +92,18 @@
                 Width = 80,
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left
             };
-            btn_Cancel.Click += (s, e) =>
+            btn_CC.Click += (s, e) =>
             {
-                btn_Cancel.Enabled = false;
-                _cts.Cancel();
+                if (btn_CC.Text == "Cancel")
+                {
+                    btn_CC.Enabled = false;
+                    _cts.Cancel();
+                }
+                else
+                    this.Close();
+                
             };
-            Controls.Add(btn_Cancel);
+            Controls.Add(btn_CC);
         }
 
         public void SetTotal(int total)
@@ -154,9 +164,10 @@
             panelContainer.Hide();
             lbl_Summary.Text = $"Done: {totalGames} total, {completedGames} success, {failedGames} failed";
             if (failedFiles.Any())
-            {
                 lbl_Summary.Text += "\nFailed Files:\n" + string.Join("\n", failedFiles);
-            }
+
+            btn_CC.Text = "Close";
+            this.Update();
         }
     }
 }

@@ -37,6 +37,9 @@
             tb_M3U_FileName = new TextBox();
             lbl_M3U_FileName = new Label();
             chk_M3U_CopyMetaData = new CheckBox();
+            tb_M3U_ManulEntry = new TextBox();
+            btn_M3U_Add = new Button();
+            btn_M3U_Delete = new Button();
             SuspendLayout();
             // 
             // lb_M3U_gamefiles
@@ -52,7 +55,7 @@
             // chk_M3U_CreateSubDir
             // 
             chk_M3U_CreateSubDir.AutoSize = true;
-            chk_M3U_CreateSubDir.Location = new Point(586, 114);
+            chk_M3U_CreateSubDir.Location = new Point(638, 105);
             chk_M3U_CreateSubDir.Margin = new Padding(2);
             chk_M3U_CreateSubDir.Name = "chk_M3U_CreateSubDir";
             chk_M3U_CreateSubDir.Size = new Size(93, 19);
@@ -62,7 +65,7 @@
             // 
             // btn_M3U_Create
             // 
-            btn_M3U_Create.Location = new Point(725, 111);
+            btn_M3U_Create.Location = new Point(727, 136);
             btn_M3U_Create.Margin = new Padding(2);
             btn_M3U_Create.Name = "btn_M3U_Create";
             btn_M3U_Create.Size = new Size(78, 20);
@@ -96,7 +99,7 @@
             // chk_M3U_HideFiles
             // 
             chk_M3U_HideFiles.AutoSize = true;
-            chk_M3U_HideFiles.Location = new Point(586, 93);
+            chk_M3U_HideFiles.Location = new Point(638, 84);
             chk_M3U_HideFiles.Margin = new Padding(2);
             chk_M3U_HideFiles.Name = "chk_M3U_HideFiles";
             chk_M3U_HideFiles.Size = new Size(77, 19);
@@ -125,7 +128,7 @@
             // chk_M3U_CopyMetaData
             // 
             chk_M3U_CopyMetaData.AutoSize = true;
-            chk_M3U_CopyMetaData.Location = new Point(586, 70);
+            chk_M3U_CopyMetaData.Location = new Point(638, 61);
             chk_M3U_CopyMetaData.Margin = new Padding(2);
             chk_M3U_CopyMetaData.Name = "chk_M3U_CopyMetaData";
             chk_M3U_CopyMetaData.Size = new Size(112, 19);
@@ -133,11 +136,41 @@
             chk_M3U_CopyMetaData.Text = "Copy Metadata?";
             chk_M3U_CopyMetaData.UseVisualStyleBackColor = true;
             // 
+            // tb_M3U_ManulEntry
+            // 
+            tb_M3U_ManulEntry.Location = new Point(172, 136);
+            tb_M3U_ManulEntry.Name = "tb_M3U_ManulEntry";
+            tb_M3U_ManulEntry.Size = new Size(329, 23);
+            tb_M3U_ManulEntry.TabIndex = 10;
+            // 
+            // btn_M3U_Add
+            // 
+            btn_M3U_Add.Location = new Point(507, 135);
+            btn_M3U_Add.Name = "btn_M3U_Add";
+            btn_M3U_Add.Size = new Size(75, 23);
+            btn_M3U_Add.TabIndex = 11;
+            btn_M3U_Add.Text = "Add";
+            btn_M3U_Add.UseVisualStyleBackColor = true;
+            btn_M3U_Add.Click += btn_M3U_Add_Click;
+            // 
+            // btn_M3U_Delete
+            // 
+            btn_M3U_Delete.Location = new Point(8, 134);
+            btn_M3U_Delete.Name = "btn_M3U_Delete";
+            btn_M3U_Delete.Size = new Size(75, 23);
+            btn_M3U_Delete.TabIndex = 12;
+            btn_M3U_Delete.Text = "Delete";
+            btn_M3U_Delete.UseVisualStyleBackColor = true;
+            btn_M3U_Delete.Click += btn_M3U_Delete_Click;
+            // 
             // Form_M3U
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(818, 142);
+            ClientSize = new Size(818, 171);
+            Controls.Add(btn_M3U_Delete);
+            Controls.Add(btn_M3U_Add);
+            Controls.Add(tb_M3U_ManulEntry);
             Controls.Add(chk_M3U_CopyMetaData);
             Controls.Add(lbl_M3U_FileName);
             Controls.Add(tb_M3U_FileName);
@@ -168,5 +201,8 @@
         private TextBox tb_M3U_FileName;
         private Label lbl_M3U_FileName;
         private CheckBox chk_M3U_CopyMetaData;
+        private TextBox tb_M3U_ManulEntry;
+        private Button btn_M3U_Add;
+        private Button btn_M3U_Delete;
     }
 }

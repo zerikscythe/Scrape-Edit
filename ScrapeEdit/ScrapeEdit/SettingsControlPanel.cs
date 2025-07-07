@@ -407,8 +407,8 @@ namespace ScrapeEdit
 
             if (testResult)
             {
-                appSettings.UserName = UserName;
-                appSettings.Password = Password;
+                appSettings.SetUserName(UserName);
+                appSettings.SetPassword(Password);
                 appSettings.WorkingCreds = true;
                 appSettings.Save();
             }
@@ -451,10 +451,10 @@ namespace ScrapeEdit
 
         public void ProcessValues_Login()
         {
-            if (!string.IsNullOrEmpty(appSettings.UserName))
-                tb_SSL_Username.Text = appSettings.UserName;
-            if (!string.IsNullOrEmpty(appSettings.Password))
-                tb_SSL_Password.Text = appSettings.Password;
+            if (!string.IsNullOrEmpty(SessionSettings.UserName))
+                tb_SSL_Username.Text = SessionSettings.UserName;
+            if (!string.IsNullOrEmpty(SessionSettings.Password))
+                tb_SSL_Password.Text = SessionSettings.Password;
 
             UpdatePassFail(appSettings.WorkingCreds);
 
@@ -479,8 +479,8 @@ namespace ScrapeEdit
 
         public void ProcessValues_Directory()
         {
-            lbl_DIR_Root.Text = appSettings.RomDirectory;
-            lbl_DIR_Cache.Text = appSettings.SEDirectory;
+            lbl_DIR_Root.Text = SessionSettings.RomDirectory;
+            lbl_DIR_Cache.Text = SessionSettings.SettingsFolder;
         }
 
         private void btn_DIR_Root_Click(object sender, EventArgs e)
@@ -489,7 +489,7 @@ namespace ScrapeEdit
             string folder = GetUserDir();
             if (!string.IsNullOrWhiteSpace(folder))
             {
-                if (folder != appSettings.RomDirectory) //user can setup new location for roms
+                if (folder != SessionSettings.RomDirectory) //user can setup new location for roms
                 {
                     var result = MessageBox.Show("A new ROM dir has been selected.\nROM structure will now be refreshed! \nPress NO to cancel change!", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
 
@@ -511,7 +511,7 @@ namespace ScrapeEdit
             string folder = GetUserDir();
             if (!string.IsNullOrWhiteSpace(folder))
             {
-                if (folder != appSettings.RomDirectory) //user can setup new location for roms
+                if (folder != SessionSettings.RomDirectory) //user can setup new location for roms
                 {
                     _Reload_SEDIR = true;
                     appSettings.SetSEDir(folder);

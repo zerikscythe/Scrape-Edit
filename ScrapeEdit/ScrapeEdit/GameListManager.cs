@@ -17,21 +17,18 @@ namespace ScrapeEdit
                 doc.LoadXml(xmlData);
 
                 scrapedGame.Id = int.TryParse(doc.SelectSingleNode("//jeu")?.Attributes["id"]?.Value, out var id) ? id : 0;
-                scrapedGame.Name = doc.SelectSingleNode($"//jeu/noms/nom[@region='{GlobalDefaults.DefaultRegionAbrv}']")?.InnerText
-                                     ?? doc.SelectSingleNode($"//jeu/noms/nom[@region='wor']")?.InnerText
-                                     ?? node.FileName;
+                scrapedGame.Name = GetXML_GameDisplayName(xmlData);
                 scrapedGame.Developer = doc.SelectSingleNode("//jeu/developpeur")?.InnerText ?? "Unknown";
                 scrapedGame.Publisher = doc.SelectSingleNode("//jeu/editeur")?.InnerText ?? "Unknown";
                 scrapedGame.ReleaseDate = doc.SelectSingleNode("//jeu/dates/date")?.InnerText ?? "Unknown";
                 scrapedGame.Rating = double.TryParse(doc.SelectSingleNode("//jeu/note")?.InnerText, out var rating) ? rating : 0.0;
-                scrapedGame.Path = doc.SelectSingleNode("//jeu/rom/romfilename")?.InnerText ?? "Unknown";
+                scrapedGame.Path = "./" + doc.SelectSingleNode("//jeu/rom/romfilename")?.InnerText ?? "./"+node.FileNameFull;
                 scrapedGame.Players = doc.SelectSingleNode("//jeu/joueurs")?.InnerText ?? "1";
                 scrapedGame.Genre = doc.SelectSingleNode("//jeu/genres/genre")?.InnerText ?? "Unknown";
                 scrapedGame.Description = doc.SelectSingleNode($"//jeu/synopsis/synopsis[@langue='{GlobalDefaults.DefaultLangAbrv}']")?.InnerText
-                                          //?? doc.SelectSingleNode("//jeu/synopsis/synopsis[@langue='en']")?.InnerText
                                           ?? "No synopsis available";
-                scrapedGame.Region = doc.SelectSingleNode("//jeu/regions/region")?.InnerText ?? "??";
-
+                scrapedGame.Region = doc.SelectSingleNode("//jeu/rom/romregions")?.InnerText ?? "??";
+                
 
             }
             catch (Exception ex)
@@ -41,11 +38,36 @@ namespace ScrapeEdit
 
             return scrapedGame;
         }
+        public static string GetXML_GameDisplayName(string xmldata)
+        {
+            XmlDocument doc = new XmlDocument();
+            doc.LoadXml(xmldata);
 
+            // Get preferred region
+            string[] preferredRegions = new[]
+            {
+                GlobalDefaults.DefaultRegionAbrv?.ToLowerInvariant(),
+                "ss", "eu", "wor"
+            };
 
+            XmlNodeList nameNodes = doc.SelectNodes("//jeu/noms/nom");
+            if (nameNodes != null)
+            {
+                foreach (string region in preferredRegions.Distinct()) // prevent duplicates
+                {
+                    foreach (XmlNode node in nameNodes)
+                    {
+                        if (node.Attributes?["region"]?.InnerText.ToLowerInvariant() == region)
+                        {
+                            return node.InnerText.Trim();
+                        }
+                    }
+                }
+            }
 
-
-
+            // Fallback if no region matches
+            return "Unknown Title";
+        }
         public static void UpdateGameListEntry(TreeNodeDetail node)
         {
             //var consoleNode = ReturnConsoleNodeFromChild(node);
@@ -98,7 +120,9 @@ namespace ScrapeEdit
             }
         }
         public static void MoveMediaToLocalDir(
-        TreeNodeDetail node, string seDir, string oldFileName = null)
+        TreeNodeDetail node, 
+        //string seDir, 
+        string oldFileName = null)
         {
             // purge the old art first (if renaming occurred)
             if (!string.IsNullOrEmpty(oldFileName)
@@ -121,35 +145,35 @@ namespace ScrapeEdit
             {
                 //move img files to local folder
                 art_Image = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                    node.Tag_SubDirPath,
                    GameListSettings.MainImage,
                    node.FileName + "-" + GameListSettings.MainImage + ".png");
 
                 art_Marquee = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                                    node.Tag_SubDirPath,
                    GameListSettings.Marquee,
                    node.FileName + "-" + GameListSettings.Marquee + ".png");
 
                 art_Thumbnail = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                                    node.Tag_SubDirPath,
                    GameListSettings.Thumbnail,
                    node.FileName + "-" + GameListSettings.Thumbnail + ".png");
 
                 art_Video = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                                   node.Tag_SubDirPath,
                    GameListSettings.Video,
                    node.FileName + "-" + GameListSettings.Video + ".mp4");
 
                 art_Manual = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                    node.Tag_SubDirPath,
                    "manuel",
@@ -159,31 +183,31 @@ namespace ScrapeEdit
             {
                 //move img files to local folder
                 art_Image = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                    GameListSettings.MainImage,
                    node.FileName + "-" + GameListSettings.MainImage + ".png");
 
                 art_Marquee = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                    GameListSettings.Marquee,
                    node.FileName + "-" + GameListSettings.Marquee + ".png");
 
                 art_Thumbnail = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                    GameListSettings.Thumbnail,
                    node.FileName + "-" + GameListSettings.Thumbnail + ".png");
 
                 art_Video = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                    GameListSettings.Video,
                    node.FileName + "-" + GameListSettings.Video + ".mp4");
 
                 art_Manual = Path.Combine(
-                   seDir,
+                   SessionSettings.SEDirectory_ROM,
                    node.Tag_ConsoleName,
                    "manuel",
                    node.FileName + "-" + "manuel.pdf");
@@ -247,9 +271,9 @@ namespace ScrapeEdit
             File.WriteAllText(xmlPath, xmlData);
         }
 
-        public static void PostProcess(TreeNodeDetail node, string seDir)
+        public static void PostProcess(TreeNodeDetail node)//, string seDir)
         {
-            MoveMediaToLocalDir(node, seDir);
+            MoveMediaToLocalDir(node); //, seDir);
             node.Game = SetImageLinks(node);
             UpdateGameListEntry(node);
         }

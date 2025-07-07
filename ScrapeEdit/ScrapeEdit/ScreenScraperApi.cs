@@ -21,15 +21,19 @@ namespace ScrapeEdit
         {
             return xmlData
                 .Replace(_DEV_KEY._devid,       "#Secret1")
-                .Replace(_DEV_KEY._devpassword, "#Secret2");
-                //.Replace(_DEV_KEY._softname, "_softname");
+                .Replace(_DEV_KEY._devpassword, "#Secret2")
+                .Replace(_DEV_KEY._softname, "#SOFTWARE")
+                .Replace(SessionSettings.UserName, "#USR_NAME")
+                .Replace(SessionSettings.Password, "#USR_PWRD");
         }
         public static string DeObfuscate(string xmlData)
         {
             return xmlData
                 .Replace("#Secret1", _DEV_KEY._devid)
-                .Replace("#Secret2", _DEV_KEY._devpassword);
-                //.Replace("_softname", _DEV_KEY._softname);
+                .Replace("#Secret2", _DEV_KEY._devpassword)
+                .Replace("#SOFTWARE", _DEV_KEY._softname)
+                .Replace("#USR_NAME", SessionSettings.UserName)
+                .Replace("#USR_PWRD", SessionSettings.Password);
         }
     }
 
@@ -55,10 +59,10 @@ namespace ScrapeEdit
             get { return _DEV_KEY._softname; }
         }
 
-        public void LoadCredentials(string user, string pwrd)
+        public ScreenScraperApi()
         {
-            _ssid = user;//lines[3].Trim(),
-            _sspassword = pwrd; //lines[4].Trim()
+            _ssid = SessionSettings.UserName;
+            _sspassword = SessionSettings.Password;
         }
 
         public string GenerateXmlData(TreeNodeDetail node, string userInputName = "", string userConsoleID = "", bool retry = false)//, string romtype = "rom", string romnom = null, long? romtaille = null)
@@ -92,7 +96,7 @@ namespace ScrapeEdit
                 response.EnsureSuccessStatusCode(); // Throws exception if the status code is not 2xx
                 string replyData = response.Content.ReadAsStringAsync().Result; 
                 return ObfuscateDevCredentials.Obfuscate(replyData); // Return the XML data obfuscated
-                //return response.Content.ReadAsStringAsync().Result; // Return the XML data
+
             }
             catch (HttpRequestException ex) when (ex.Message.Contains("404"))
             {

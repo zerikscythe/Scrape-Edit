@@ -34,6 +34,7 @@
             // rtxt_XML_Viewport
             // 
             rtxt_XML_Viewport.AcceptsTab = true;
+            rtxt_XML_Viewport.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             rtxt_XML_Viewport.Location = new Point(12, 12);
             rtxt_XML_Viewport.Name = "rtxt_XML_Viewport";
             rtxt_XML_Viewport.Size = new Size(664, 426);

@@ -2,6 +2,30 @@
 
 namespace ScrapeEdit
 {
+    public static class SessionSettings
+    { 
+        public static string UserName { get; set; } = "";
+        public static string Password { get; set; } = "";
+        public static string RomDirectory { get; set; } = "";
+        public static string SettingsFolder { get; set; } = "";
+        public static string SEDirectory { 
+            get 
+            { 
+                return Path.Combine(SettingsFolder, "Cache"); 
+            } 
+        }
+        public static string SEDirectory_ROM
+        {
+            get 
+            { 
+                return Path.Combine(SEDirectory, "roms"); 
+            }
+        }
+        public static bool editingInProgress { get; set; } = false;
+
+
+    }
+
     [XmlRoot("appSettings")]
     public class AppSettings
     {
@@ -10,31 +34,42 @@ namespace ScrapeEdit
 
         private static string SettingsFilePath => Path.Combine(SettingsFolder, "appSettings.xml");
 
-
         [XmlElement("romDirectory")]
         public string RomDirectory { get; set; }
 
         [XmlElement("seDirectory")]
-
         public string SEDirectory { get; set; } = Path.Combine(SettingsFolder,"Cache");
 
         [XmlElement("userName")]
-        public string UserName { get; set; }
+        public string UserName {get;set;}
 
         [XmlElement("passWord")]
-        public string Password { get; set; }
+        public string Password 
+        {get;set;}
 
         [XmlElement]
         public bool WorkingCreds = false;
 
+        public void SetUserName(string userName)
+        {
+            UserName = userName;
+            SessionSettings.UserName = userName;
+        }
+        public void SetPassword(string password)
+        {
+            Password = password;
+            SessionSettings.Password = password;
+        }
         public void SetRomDir(string filePath)
         {
             RomDirectory = filePath;
+            SessionSettings.RomDirectory = filePath;
             Save();
         }
         public void SetSEDir(string filePath)
         { 
             SEDirectory = filePath; 
+            SessionSettings.SettingsFolder = filePath;
             Save();
         }
 
@@ -50,6 +85,8 @@ namespace ScrapeEdit
         [XmlElement("gamelistSettings")]
         public SerializableGameListSettings GameListSettingsData { get; set; } = new SerializableGameListSettings();
 
+        bool settingsMissing = false;
+
         public void Save()
         {
             try
@@ -61,6 +98,8 @@ namespace ScrapeEdit
                 GameListSettingsData.Update();
                 ScrapeSettingsData.Update();
 
+                if (settingsMissing)
+                    SessionSettings.SettingsFolder = SettingsFolder;
 
 
                 var serializer = new XmlSerializer(typeof(AppSettings));
@@ -75,9 +114,9 @@ namespace ScrapeEdit
             }
         }
 
-        public string[] Load()
+        public void Load()//string[] Load()
         {
-            string[] reply = new string[2];
+            //string[] reply = new string[2];
 
             if (!File.Exists(SettingsFilePath))
                 Save();
@@ -89,9 +128,6 @@ namespace ScrapeEdit
                     using (var reader = new StreamReader(SettingsFilePath))
                     {
                         var settings = (AppSettings)serializer.Deserialize(reader);
-
-                        reply[0] = Directory.Exists(settings.RomDirectory) ? settings.RomDirectory : "";
-                        reply[1] = Directory.Exists(settings.SEDirectory) ? settings.SEDirectory : "";
 
                         if (!Directory.Exists(SEDirectory))
                         {
@@ -105,6 +141,11 @@ namespace ScrapeEdit
                         this.UserName = settings.UserName;
                         this.Password = settings.Password;
                         this.WorkingCreds = settings.WorkingCreds;
+
+                        SessionSettings.UserName = settings.UserName;
+                        SessionSettings.Password = settings.Password;
+                        SessionSettings.RomDirectory = settings.RomDirectory;
+                        SessionSettings.SettingsFolder = SettingsFolder; // Static settings folder path
 
                         // Apply loaded values to the static ScrapeSettings class
                         ScrapeSettings.RenameRoms = settings.ScrapeSettingsData.RenameRoms;
@@ -159,7 +200,7 @@ namespace ScrapeEdit
                 }
             }
 
-            return reply;
+            //return reply;
         }
 
     }

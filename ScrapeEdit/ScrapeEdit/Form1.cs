@@ -2,6 +2,7 @@
 using ScapeEdit;
 using System.Diagnostics;
 using System.Globalization;
+using System.ComponentModel;
 
 namespace ScrapeEdit
 {
@@ -11,8 +12,13 @@ namespace ScrapeEdit
         ScreenScraperApi ssa;
         Form_M3U m3u;
         Form_Loading form_Loading;
+        Dictionary<string, string> ValidEXT;//  
+        TreeView tv_ActiveRomDir = new TreeView();
+        ImageList nodeImageList = new ImageList();
 
-        //private ContextMenuStrip contextMenuTreeView;
+        ConsoleList consoleList;
+        private SettingsControlPanel settingsPanel;
+
         private ToolStripMenuItem viewXMLNodeToolStripMenuItem;
         private ToolStripMenuItem scrapeNodeToolStripMenuItem;
         private ToolStripMenuItem renameNodeToolStripMenuItem;
@@ -20,35 +26,41 @@ namespace ScrapeEdit
         private ToolStripMenuItem deleteMasterNodeToolStripMenuItem;
         private ToolStripMenuItem createM3UToolStripMenuItem;
         private ToolStripMenuItem rebuildMediaToolStripMenuItem;
+        private ToolStripMenuItem extensionFixToolStripMenuItem;
 
-        bool FoundUser = false;
-        string romDir = @"";
-        string seDir = @"";
-        string seRomDir = @"";
+        private bool suppressCheckboxEvent = false;
 
-        Dictionary<string, string> ValidEXT = new Dictionary<string, string>();
-        TreeView tv_ActiveRomDir = new TreeView();
-
-        void Update_SE_DIRs(string path)
+        private bool _scrapeInProgress;
+        bool scrapeInProgress
         {
-            seDir = path;
-            seRomDir = Path.Combine(seDir, "roms\\");
+            get => _scrapeInProgress;
+            set
+            {
+                _scrapeInProgress = value;
+                settingsToolStripMenuItem1.Enabled = !value;
+            }
         }
+        private Queue<TreeNodeDetail> scrapeQueue;
+        private List<TreeNodeDetail> scrapedNodes;
+        private int activeScrapes;
+        private readonly int maxConcurrency = 8;
+        private Form_DownloadProgress progressForm;
+
         private async void Form1_Shown(object sender, EventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(romDir))
+            if (string.IsNullOrWhiteSpace(SessionSettings.RomDirectory))
             {
                 MessageBox.Show("Please select a ROM directory!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-                InitializeTreeViewLoading();
+            InitializeTreeViewLoading();
 
             //for testing
             testCodeToolStripMenuItem.Visible = false;
             devModeOffToolStripMenuItem.Visible = false;
             devModeOffToolStripMenuItem.Enabled = false;
-                //this.devModeOffToolStripMenuItem_Click(sender, e); // Ensure dev mode is on after loading
+            //this.devModeOffToolStripMenuItem_Click(sender, e); // Ensure dev mode is on after loading
         }
         private async void InitializeTreeViewLoading()
         {
@@ -68,6 +80,7 @@ namespace ScrapeEdit
             try
             {
                 this.Hide();
+                consoleList = new ConsoleList();
                 await Task.Run(() => PopulateTreeView(progress, fileProgress));
             }
             catch (KeyNotFoundException ex)
@@ -84,7 +97,6 @@ namespace ScrapeEdit
                 this.Show();
             }
         }
-
         private void SetupConsoleIDs()
         {
             var dir = Path.GetDirectoryName(ConsoleIDHandler.filePath);
@@ -113,21 +125,18 @@ namespace ScrapeEdit
             FormStartup();
             this.Shown += Form1_Shown;
         }
-
-
         async void FormStartup()
         {
             //appSettings
             appSettings = new AppSettings();
-            romDir = appSettings.Load()[0];
-            Update_SE_DIRs(appSettings.Load()[1]);
-
-            //CanScrape = appSettings.WorkingCreds;
+            appSettings.Load();
 
             ssa = new ScreenScraperApi();
-            ssa.LoadCredentials(appSettings.UserName, appSettings.Password);
 
             // Ensure contextMenuTreeView is initialized before assigning it
+
+            contextMenuTreeView.Opening += ContextMenuTreeView_Opening;
+
 
             //contextMenuTreeView = new ContextMenuStrip();
             scrapeNodeToolStripMenuItem = new ToolStripMenuItem("Scrape");
@@ -138,6 +147,9 @@ namespace ScrapeEdit
             viewXMLNodeToolStripMenuItem = new ToolStripMenuItem("View Raw XML");
             deleteNodeToolStripMenuItem = new ToolStripMenuItem("Delete File(s)");
 
+            extensionFixToolStripMenuItem = new ToolStripMenuItem("Fix Extensions");
+
+
             // Add items to context menu
             contextMenuTreeView.Items.Add(scrapeNodeToolStripMenuItem);
             contextMenuTreeView.Items.Add(rebuildMediaToolStripMenuItem);
@@ -146,6 +158,7 @@ namespace ScrapeEdit
             contextMenuTreeView.Items.Add(renameNodeToolStripMenuItem);
             contextMenuTreeView.Items.Add(deleteNodeToolStripMenuItem);
             contextMenuTreeView.Items.Add(deleteMasterNodeToolStripMenuItem);
+            contextMenuTreeView.Items.Add(extensionFixToolStripMenuItem);
 
 
             // Ensure the TreeView is not null before assigning its context menu
@@ -160,24 +173,92 @@ namespace ScrapeEdit
             scrapeNodeToolStripMenuItem.Click += scrapeNodeToolStripMenuItem_Click;
             createM3UToolStripMenuItem.Click += CreateM3UToolStripMenuItem_Click;
             rebuildMediaToolStripMenuItem.Click += RebuildMediaToolStripMenuItem_Click;
-            lbl_Main_Video.Click += LBL_Video_Click;
-            lbl_Main_Man.Click += LBL_Manual_Click;
-            chk_Main_EDIT.CheckedChanged += Chk_Main_EDIT_CheckedChanged;
-            btn_Main_SaveChanges.Click += Btn_Main_SaveChanges_Click;
-            btn_Main_ImgDOWN.Click += btn_Main_ImgDOWN_Click;
-            btn_Main_ImgUP.Click += btn_Main_ImgUP_Click;
 
-            //PB
-            pb_ImgDisplay.MouseClick += Pb_ImgDisplay_Click;
-            pb_ImgDisplay.SizeMode = PictureBoxSizeMode.Zoom;
-
-            DisableEditControls();
-            btn_Main_ImgDOWN.Enabled = false;
-            btn_Main_ImgUP.Enabled = false;
-            chk_Main_EDIT.Enabled = false;
-
+            extensionFixToolStripMenuItem.Click += ExtensionFixToolStripMenuItem_Click;
 
         }
+
+        private void ExtensionFixToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            TreeNodeDetail node = active_TreeNode();
+
+            if (node == null || !node.isConsole || node.Console == null)
+            {
+                MessageBox.Show("Please select a valid console node with metadata.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // 1. Try to get known extensions from ScrapedConsole
+            string[] ext = node.Console.Extensions ?? [];
+
+            // 2. Format into space-separated string like: .iso .chd .cue
+            string prefill = string.Join(" ", ext.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e =>
+            {
+                var trimmed = e.Trim();
+                return trimmed.StartsWith(".") ? trimmed : "." + trimmed;
+            }));
+
+            // 3. Prompt user
+            string result = Microsoft.VisualBasic.Interaction.InputBox(
+                $"Enter the file extensions this console supports (space-separated):",
+                "Fix Missing _info.txt",
+                prefill
+            );
+
+            if (string.IsNullOrWhiteSpace(result))
+            {
+                MessageBox.Show("No extensions entered. Operation canceled.", "Canceled", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 4. Write _info.txt to parent directory
+            try
+            {
+                string systemPath = node.Tag_ConsolePath;
+                if (!Directory.Exists(systemPath))
+                {
+                    MessageBox.Show("System folder not found.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                string infoFilePath = Path.Combine(systemPath, "_info.txt");
+                string content = $"ROM files extensions accepted: \"{result.Trim()}\"";
+
+                File.WriteAllText(infoFilePath, content);
+
+                MessageBox.Show("_info.txt created successfully.\nPlease reload the ROM directory.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error writing _info.txt: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void ContextMenuTreeView_Opening(object sender, CancelEventArgs e)
+        {
+            var selectedNode = tv_ActiveRomDir.SelectedNode;
+
+            if (selectedNode?.Tag?.ToString() == "Error")
+            {
+                // Only allow the extension fix item
+                foreach (ToolStripItem item in contextMenuTreeView.Items)
+                {
+                    if (item is ToolStripMenuItem menuItem)
+                    {
+                        menuItem.Visible = menuItem == extensionFixToolStripMenuItem;
+                    }
+                }
+            }
+            else
+            {
+                // Show everything as normal
+                foreach (ToolStripItem item in contextMenuTreeView.Items)
+                {
+                    item.Visible = true;
+                }
+            }
+        }
+
         private void viewXMLNodeToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             Form_XML_Editor xmlEditor = new Form_XML_Editor(active_TreeNode());
@@ -192,11 +273,10 @@ namespace ScrapeEdit
                 {
                     node.Game.Name = Path.GetFileNameWithoutExtension(node.Text);
                     node.Game.Path = node.Tag_RelativePath;
-                    //node.Game = SetImageLinks(node);
-                    GameListManager.PostProcess(node, seRomDir);
+                    GameListManager.PostProcess(node);
                     GameListManager.WriteGameListToFile(node);
 
-                    PopulateDisplayArea();
+                    //PopulateDisplayArea();
                 }
                 else
                 {
@@ -205,13 +285,27 @@ namespace ScrapeEdit
             }
             else   //search for SE data
             {
-                string pathToXML = seRomDir + node.Tag_ConsoleName + node.Tag_ConsoleRomPath + ".xml";
+                string pathToXML = SessionSettings.SEDirectory_ROM + "\\" + node.Tag_ConsoleName + node.Tag_ConsoleRomPath + ".xml";
+                try
+                {
+                    if (!File.Exists(pathToXML))
+                    {
+                        MessageBox.Show("No XML data found for this game!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error accessing XML file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
                 string xmlData = File.ReadAllText(pathToXML, Encoding.UTF8);
                 node.Game = GameListManager.ConvertSSXmlToScrapedGame(xmlData, node);
                 PostScrapeUpdates(node);
             }
 
-            PopulateDisplayArea();
+            //PopulateDisplayArea();
         }
         private void RebuildMediaToolStripMenuItem_Click(object? sender, EventArgs e)
         {
@@ -247,124 +341,7 @@ namespace ScrapeEdit
                 }
             }
         }
-        private void Pb_ImgDisplay_Click(object? sender, MouseEventArgs e)
-        {
-            PictureBox pb = sender as PictureBox;
-            TreeNodeDetail node = active_TreeNode();
 
-            // Check if the right mouse button was clicked
-            if (e.Button == MouseButtons.Right && editingInProgress)
-            {
-                if (node.Game == null)
-                    node.Game = new ScrapedGame() { Path = node.Tag_RelativePath };
-
-                // Create and configure the OpenFileDialog
-                using (OpenFileDialog openFileDialog = new OpenFileDialog())
-                {
-                    openFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-                    openFileDialog.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp|All Files|*.*";
-                    openFileDialog.FilterIndex = 1;
-                    openFileDialog.RestoreDirectory = true;
-
-                    // Open the dialog and check if the user selected a file
-                    if (openFileDialog.ShowDialog() == DialogResult.OK)
-                    {
-                        // Get the selected file's path
-                        string selectedFilePath = openFileDialog.FileName;
-
-                        // Define the destination directory (customize this as needed)
-                        string destinationDirectory = Path.Combine(node.Tag_ConsolePath, "images");
-
-                        // Create the directory if it doesn't exist
-                        if (!Directory.Exists(destinationDirectory))
-                        {
-                            Directory.CreateDirectory(destinationDirectory);
-                        }
-
-                        // Define a new file name (customize the logic as needed)
-                        // For example, rename to "NewImage" with the same file extension.
-                        string imgType = ActiveImgIndex == 0 ? "-image" :
-                                         ActiveImgIndex == 1 ? "-thumb" :
-                                         ActiveImgIndex == 2 ? "-marquee"
-                                         : "";
-
-                        string newFileName = node.FileName + imgType + Path.GetExtension(selectedFilePath);
-                        string staticImgDir = "./images";
-
-                        if (ActiveImgIndex == 0)
-                            node.Game.Image = Path.Combine(staticImgDir, newFileName).Replace("\\", "/");
-                        else if (ActiveImgIndex == 1)
-                            node.Game.Thumbnail = Path.Combine(staticImgDir, newFileName).Replace("\\", "/");
-                        else if (ActiveImgIndex == 2)
-                            node.Game.Marquee = Path.Combine(staticImgDir, newFileName).Replace("\\", "/");
-
-                        string destinationFilePath = Path.Combine(destinationDirectory, newFileName);
-
-                        try
-                        {
-                            // Copy the selected file to the destination directory
-                            // Set overwrite to true to replace an existing file with the same name.
-                            File.Copy(selectedFilePath, destinationFilePath, true);
-
-                            // Optionally, load the copied image into the PictureBox
-                            pb.Image = Image.FromFile(destinationFilePath);
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Error copying file: " + ex.Message);
-                        }
-                    }
-                }
-            }
-
-        }
-        void SaveScrapedGameUserData(TreeNodeDetail node)
-        {
-            if (node.Game == null)
-            {
-                node.Game = new ScrapedGame() { Path = node.Tag_RelativePath };
-                // return;
-            }
-            //AddNewScrapedGameToActiveGameList();
-            node.Game.Path = node.Tag_RelativePath;
-            node.Game.Favorite = chk_Main_Favorite.Checked;
-            node.Game.Hidden = chk_Main_Hidden.Checked;
-            node.Game.Name = tb_Main_Title.Text;
-            node.Game.Description = rtb_Main_Desc.Text;
-            node.Game.ReleaseDate = tb_Main_ReleaseDate.Text;
-            node.Game.Players = tb_Main_Players.Text;
-            node.Game.Publisher = tb_Main_Publisher.Text;
-            node.Game.Developer = tb_Main_Dev.Text;
-            node.Game.Rating = Convert.ToDouble(tb_Main_Rating.Text == "" ? 0 : tb_Main_Rating.Text);
-            node.Game.Genre = tb_Main_Genre.Text;
-            node.Game.Region = tb_Main_Region.Text;
-
-
-            GameListManager.UpdateGameListEntry(node);
-            node.ForeColor = Color.Black;
-            UpdateGameNodeLabel(node);
-
-        }
-        private void Btn_Main_SaveChanges_Click(object? sender, EventArgs e)
-        {
-
-            //edit the values of the scraped game 
-            SaveScrapedGameUserData(active_TreeNode());
-
-            //overwrite old entry
-            GameListManager.WriteGameListToFile(active_TreeNode());
-
-            //disable editing
-            chk_Main_EDIT.Checked = false;
-        }
-        private void Chk_Main_EDIT_CheckedChanged(object? sender, EventArgs e)
-        {
-            if (chk_Main_EDIT.Checked)
-                EnableEditControls();
-            else
-                DisableEditControls();
-
-        }
         private void CreateM3UToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             toolStripMenuItem2_Click(sender, e);
@@ -377,220 +354,120 @@ namespace ScrapeEdit
                 tv_ActiveRomDir = new TreeView();
             }
             tv_ActiveRomDir.CheckBoxes = true;
-            tv_ActiveRomDir.Location = new System.Drawing.Point(10, 40);
+            tv_ActiveRomDir.Location = new Point(10, 40);
             tv_ActiveRomDir.Width = 500;
             tv_ActiveRomDir.Height = 630;
             tv_ActiveRomDir.AfterExpand += Tv_ActiveRomDir_AfterExpand;
             tv_ActiveRomDir.AfterSelect += TV_GameNodeSelect;
             tv_ActiveRomDir.MouseUp += tv_ActiveRomDir_MouseUp;
+            tv_ActiveRomDir.BeforeCheck += tv_CHK_BeforeCheck;
             tv_ActiveRomDir.AfterCheck += TV_CHK_NodeSelection;
+
+
+            tv_ActiveRomDir.ImageList = nodeImageList;
+            nodeImageList.ColorDepth = ColorDepth.Depth32Bit;
+            nodeImageList.ImageSize = new Size(16, 16); // or 24, 24 if needed
+            nodeImageList.Images.Add("blank", new Bitmap(16, 16));
+
 
             tv_ActiveRomDir.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
             Controls.Add(tv_ActiveRomDir);
         }
-        ScrapedGame Active_ScrapedGame()
-        {
-            return active_TreeNode().Game; //activeScrapedGame;
-        }
-        bool editingInProgress = false;
-        void EnableEditControls()
-        {
-            editingInProgress = true;
 
-            tb_Main_Title.ReadOnly = false;
-            btn_Main_SaveChanges.Enabled = true;
-            chk_Main_Favorite.Enabled = true;
-            chk_Main_Hidden.Enabled = true;
-            rtb_Main_Desc.ReadOnly = false;
-            tb_Main_ReleaseDate.ReadOnly = false;
-            tb_Main_Players.ReadOnly = false;
-            btn_Main_ImgDOWN.Enabled = true;
-            btn_Main_ImgUP.Enabled = true;
-            tb_Main_Publisher.ReadOnly = false;
-            tb_Main_Dev.ReadOnly = false;
-            tb_Main_Genre.ReadOnly = false;
-            tb_Main_Rating.ReadOnly = false;
-            tb_Main_Region.ReadOnly = false;
-            btn_Main_ShowAllImages.Enabled = true;
+        private void tv_CHK_BeforeCheck(object sender, TreeViewCancelEventArgs e)
+        {
+            TreeNodeDetail node = e.Node as TreeNodeDetail;
 
-            if (ActiveImgSet == null || ActiveImgSet.Length == 0)
+            // Prevent unchecking the currently active node
+            if (node == active_TreeNode() && node.Checked && !node.isConsole)
             {
-                ActiveImgSet = new string[3]
+                e.Cancel = true;
+                return;
+            }
+        }
+
+        private void TV_CHK_NodeSelection(object sender, TreeViewEventArgs e)
+        {
+            TreeNodeDetail node = e.Node as TreeNodeDetail;
+            if (node == null)
+                return;
+
+            suppressCheckboxEvent = true;
+
+            try
+            {
+                if (node.isConsole)
                 {
-                    "","",""
-                };
+                    if (node.Checked)
+                    {
+                        node.Expand();
+                        SetChildNodesChecked(node, true);
+                    }
+                    else
+                    {
+                        SetChildNodesChecked(node, false);
+                    }
+                }
+
             }
-        }
-        void DisableEditControls()
-        {
-            editingInProgress = false;
-
-            tb_Main_Title.ReadOnly = true;
-            btn_Main_SaveChanges.Enabled = false;
-            chk_Main_Favorite.Enabled = false;
-            chk_Main_Hidden.Enabled = false;
-            rtb_Main_Desc.ReadOnly = true;
-            tb_Main_Players.ReadOnly = true;
-            tb_Main_ReleaseDate.ReadOnly = true;
-            tb_Main_Dev.ReadOnly = true;
-            tb_Main_Publisher.ReadOnly = true;
-            tb_Main_Rating.ReadOnly = true;
-            tb_Main_Genre.ReadOnly = true;
-            tb_Main_Region.ReadOnly = true;
-            btn_Main_ShowAllImages.Enabled = false;
-        }
-        private void btn_Main_ImgUP_Click(object sender, EventArgs e)
-        {
-            ActiveImgIndex--;
-
-            if (ActiveImgIndex < 0)
-                ActiveImgIndex = ActiveImgSet.Count() - 1;
-
-            LoadSGImages();
-
-        }
-        private void btn_Main_ImgDOWN_Click(object sender, EventArgs e)
-        {
-            ActiveImgIndex++;
-
-            if (ActiveImgIndex > ActiveImgSet.Count() - 1)
-                ActiveImgIndex = 0;
-
-            LoadSGImages();
-
-        }
-        Image LoadImage(string filePath)
-        {
-            byte[] imageBytes = File.ReadAllBytes(filePath);
-            using (var ms = new MemoryStream(imageBytes))
+            finally
             {
-                return Image.FromStream(ms);
+                suppressCheckboxEvent = false;
             }
         }
 
-        string[] ActiveImgSet;
-        int ActiveImgIndex = 0;
-        void LoadSGImages()
-        {
-            string missing = "";
-
-            // Check if the file exists
-            if (File.Exists(ActiveImgSet[ActiveImgIndex]))
-            {
-                // Load the image
-                pb_ImgDisplay.Image = LoadImage(ActiveImgSet[ActiveImgIndex]);
-            }
-            else
-            {
-                pb_ImgDisplay.Image = null;
-                missing = " Link Broken or File Missing!";
-            }
-
-            lbl_Main_ImgName.Text = Path.GetFileNameWithoutExtension(ActiveImgSet[ActiveImgIndex]);
-            lbl_Main_ImgError.Text = missing;
-            btn_Main_ImgDOWN.Enabled = true;
-            btn_Main_ImgUP.Enabled = true;
-        }
-        void TV_CHK_NodeSelection(object sender, TreeViewEventArgs e)
-        {
-            if (e.Node == null) return;
-
-            // Expand node if it has children
-            if (e.Node.Nodes.Count > 0)//&& e.Node.Text != "roms")
-            {
-                e.Node.Expand();
-            }
-
-            // Set all child nodes' checkboxes to the same value as the parent
-            SetChildNodesChecked(e.Node, e.Node.Checked);
-        }
         private void SetChildNodesChecked(TreeNode node, bool isChecked)
         {
             foreach (TreeNode child in node.Nodes)
             {
-                child.Checked = isChecked; // Set checked state
-                                           // SetChildNodesChecked(child, isChecked); // Recursively check all children
+                child.Checked = isChecked;
+                SetChildNodesChecked(child, isChecked);
             }
         }
-        void TV_GameNodeSelect(object sender, TreeViewEventArgs e)
+
+        private void TV_GameNodeSelect(object sender, TreeViewEventArgs e)
         {
-            if (editingInProgress)
+            TreeNodeDetail node = e.Node as TreeNodeDetail;
+
+            Control oldGrid = this.Controls.OfType<GameGrid>().FirstOrDefault();
+
+            if (oldGrid == null)
+                oldGrid = this.Controls.OfType<ConsoleGrid>().FirstOrDefault();
+
+            if (oldGrid != null)
+                this.Controls.Remove(oldGrid);
+
+
+
+            if (SessionSettings.editingInProgress)
             {
                 MessageBox.Show("You must finish editing before selecting a new game.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-
-            // Get selected node
-            TreeView treeView = sender as TreeView;
-            TreeNode selectedNode = e.Node;
-
-            if (selectedNode == null) return; // Ensure node is selected
+            if (node == null)
+                return;
 
             DeselectAllNodes();
-            selectedNode.Checked = true;
 
-            // Disable editing for root or console-level nodes
-            if (selectedNode.Parent == null || selectedNode.Level == 1)
-                chk_Main_EDIT.Enabled = false; // Disable checkbox
-            else
-                chk_Main_EDIT.Enabled = true; // Enable checkbox for game nodes
-
-            DisableEditControls();
-
-            PopulateDisplayArea();
-
-        }
-        private void PopulateDisplayArea()
-        {
-            //setActive_ScrapedGame();
-            ScrapedGame sg = active_TreeNode().Game; //Active_ScrapedGame();
-
-            if (sg != null)
+            if (!node.isConsole)
             {
-                tb_Main_Title.Text = sg.Name;
-                tb_Main_Filename.Text = sg.Path;
-                rtb_Main_Desc.Text = sg.Description;
-                tb_Main_ReleaseDate.Text = sg.ParsedReleaseDate;
-                tb_Main_Players.Text = sg.Players;
-                chk_Main_Hidden.Checked = sg.Hidden;
-                chk_Main_Favorite.Checked = sg.Favorite;
-                tb_Main_Dev.Text = sg.Developer;
-                tb_Main_Publisher.Text = sg.Publisher;
-                tb_Main_Genre.Text = sg.Genre;
-                tb_Main_Rating.Text = sg.Rating.ToString();
-                tb_Main_Region.Text = sg.Region;
-                lbl_Main_HASH.Text = "Hash: " + active_TreeNode().Tag_HashMatchFound.ToString();
+                node.Checked = true;
+                GameGrid gameGrid = new GameGrid(node);
+                gameGrid.Location = new Point(520, 40);
+                this.Controls.Add(gameGrid);
 
-                ActiveImgSet = new string[3]
-                {
-                    Path.Combine(active_TreeNode().Tag_ConsolePath, sg.Image == null  || sg.Image == "" ? "Missing Image File" : sg.NormalizePath(sg.Image)),
-                    Path.Combine(active_TreeNode().Tag_ConsolePath, sg.Thumbnail == null || sg.Thumbnail == "" ? "Missing Thumbnail File" : sg.NormalizePath(sg.Thumbnail)),
-                    Path.Combine(active_TreeNode().Tag_ConsolePath, sg.Marquee == null || sg.Marquee == "" ? "Missing Marquee File" : sg.NormalizePath(sg.Marquee))
-                };
-                ActiveImgIndex = 0;
-                LoadSGImages();
             }
-            else
+            else if(!node.isSubDir)
             {
-                tb_Main_Title.Text = active_TreeNode().Text; //a gameNode w/ no properties but a name should still exist
-                pb_ImgDisplay.Image = null;
-                rtb_Main_Desc.Text = "";
-                tb_Main_ReleaseDate.Text = "";
-                tb_Main_Players.Text = "";
-                chk_Main_Favorite.Checked = false;
-                chk_Main_Hidden.Checked = false;
-                ActiveImgSet = new string[0];
-                lbl_Main_ImgName.Text = "";
-                lbl_Main_ImgError.Text = "";
-                btn_Main_ImgDOWN.Enabled = false;
-                btn_Main_ImgUP.Enabled = false;
-                tb_Main_Publisher.Text = "";
-                tb_Main_Dev.Text = "";
-                tb_Main_Rating.Text = "";
-                tb_Main_Genre.Text = "";
-                tb_Main_Region.Text = "";
+                //node.Checked = true;
+                ConsoleGrid consoleGrid = new ConsoleGrid(node);
+                consoleGrid.Location = new Point(520, 40);
+                this.Controls.Add(consoleGrid);
             }
+            //chk_Main_EDIT.Enabled = !node.isConsole;
+
+
 
         }
         private void tv_ActiveRomDir_MouseUp(object sender, MouseEventArgs e)
@@ -613,8 +490,17 @@ namespace ScrapeEdit
                 MessageBox.Show("Active Scrape in Progress! Please wait!");
                 return;
             }
-            if (!editingInProgress)
-                ScrapeSingleOrMulti(GetSelectedNodes());
+            if (!SessionSettings.editingInProgress)
+            { 
+                if(active_TreeNode().isConsole)//select all children nodes 1st
+                {
+                    active_TreeNode().Expand();
+                    SetChildNodesChecked(active_TreeNode(), true);
+                }
+
+                ScrapeSingleOrMulti(GetSelectedNodes()); 
+            
+            }
             else
                 MessageBox.Show("Before Scraping ensure:\nAccount is loaded!\nNot Editing\nHave a game selected", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
@@ -692,7 +578,6 @@ namespace ScrapeEdit
                 }
             }
         }
-
         private void deleteNodeToolStripMenuItem_Click(object sender, EventArgs e)
         {
             // 1. Gather all selected game nodes
@@ -737,7 +622,6 @@ namespace ScrapeEdit
                     node.Remove();
             }
         }
-
         private void deleteMasterNodeToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (active_TreeNode() != null)
@@ -751,7 +635,7 @@ namespace ScrapeEdit
                 }
 
                 string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
-                string xmlFilePath = Path.Combine(seRomDir, fileNameWithoutExtension + ".xml");
+                string xmlFilePath = Path.Combine(SessionSettings.SEDirectory_ROM, fileNameWithoutExtension + ".xml");
 
                 DialogResult result = MessageBox.Show(
                     $"Are you sure you want to delete this file and all related metadata?\n{filePath}",
@@ -789,13 +673,13 @@ namespace ScrapeEdit
         }
         private void DeleteMasterGameMetadata(TreeNodeDetail node)
         {
-            if (!Directory.Exists(seRomDir))
+            if (!Directory.Exists(SessionSettings.RomDirectory))
             {
-                Console.WriteLine($"[DeleteGameMetadata] Directory does not exist: {seRomDir}");
+                Console.WriteLine($"[DeleteGameMetadata] Directory does not exist: {SessionSettings.RomDirectory}");
                 return;
             }
 
-            string systemFolder = Path.Combine(seRomDir, node.Tag_ConsoleName, node.Tag_ConsolePath);// Path.GetFileName(Path.GetDirectoryName(fileNameWithoutExtension)));
+            string systemFolder = Path.Combine(SessionSettings.SEDirectory_ROM, node.Tag_ConsoleName, node.Tag_ConsolePath);// Path.GetFileName(Path.GetDirectoryName(fileNameWithoutExtension)));
 
             if (!Directory.Exists(systemFolder))
             {
@@ -831,170 +715,6 @@ namespace ScrapeEdit
             }
         }
 
-        void OpenFile(string filePath)
-        {
-            if (!File.Exists(filePath))
-            {
-                MessageBox.Show($"{Path.GetFileName(filePath)}, not found!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            // Let the OS decide which app to use
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = filePath,
-                UseShellExecute = true // This tells Windows to open it with the default program
-            });
-
-
-        }
-
-        void LBL_Manual_Click(object sender, EventArgs e)
-        {
-            if (editingInProgress)
-            {
-                TreeNodeDetail node = active_TreeNode();
-
-                //if (Active_ScrapedGame() == null)
-                //    AddNewScrapedGameToActiveGameList();
-
-                // Create and configure the OpenFileDialog
-                using (OpenFileDialog openFileDialog = new OpenFileDialog())
-                {
-                    openFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    openFileDialog.Filter = "PDF Files|*.pdf;|All Files|*.*";
-                    openFileDialog.FilterIndex = 1;
-                    openFileDialog.RestoreDirectory = true;
-
-                    // Open the dialog and check if the user selected a file
-                    if (openFileDialog.ShowDialog() == DialogResult.OK)
-                    {
-                        // Get the selected file's path
-                        string selectedFilePath = openFileDialog.FileName;
-
-                        // Define the destination directory (customize this as needed)
-                        string destinationDirectory = Path.Combine(node.Tag_ConsolePath, "manuals");
-
-                        // Create the directory if it doesn't exist
-                        if (!Directory.Exists(destinationDirectory))
-                        {
-                            Directory.CreateDirectory(destinationDirectory);
-                        }
-
-                        string newFileName = node.FileName + "-manual" + Path.GetExtension(selectedFilePath);
-                        string staticImgDir = "./manuals";
-
-                        node.Game.Manual = Path.Combine(staticImgDir, newFileName).Replace("\\", "/");
-
-                        string destinationFilePath = Path.Combine(destinationDirectory, newFileName);
-
-                        try
-                        {
-                            // Copy the selected file to the destination directory
-                            // Set overwrite to true to replace an existing file with the same name.
-                            File.Copy(selectedFilePath, destinationFilePath, true);
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Error copying file: " + ex.Message);
-                        }
-                    }
-                }
-
-
-            }
-            else if (Active_ScrapedGame() != null)
-            {
-
-                if (Active_ScrapedGame().Manual != null)
-                    OpenFile(Path.Combine(active_TreeNode().Tag_ConsolePath, active_TreeNode().Game.Manual));
-                else
-                    MessageBox.Show("No Manual Found", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        void LBL_Video_Click(object sender, EventArgs e)
-        {
-            if (editingInProgress)
-            {
-
-                //if (Active_ScrapedGame() == null)
-                //    AddNewScrapedGameToActiveGameList();
-
-                TreeNodeDetail node = active_TreeNode();
-
-                // Create and configure the OpenFileDialog
-                using (OpenFileDialog openFileDialog = new OpenFileDialog())
-                {
-                    openFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
-                    openFileDialog.Filter = "MP4 Files|*.mp4;|All Files|*.*";
-                    openFileDialog.FilterIndex = 1;
-                    openFileDialog.RestoreDirectory = true;
-
-                    // Open the dialog and check if the user selected a file
-                    if (openFileDialog.ShowDialog() == DialogResult.OK)
-                    {
-                        // Get the selected file's path
-                        string selectedFilePath = openFileDialog.FileName;
-
-                        // Define the destination directory (customize this as needed)
-                        string destinationDirectory = Path.Combine(node.Tag_ConsolePath, "videos");
-
-                        // Create the directory if it doesn't exist
-                        if (!Directory.Exists(destinationDirectory))
-                        {
-                            Directory.CreateDirectory(destinationDirectory);
-                        }
-
-                        string newFileName = node.FileName + "-video" + Path.GetExtension(selectedFilePath);
-                        string staticImgDir = "./videos";
-
-                        node.Game.Video = Path.Combine(staticImgDir, newFileName).Replace("\\", "/");
-
-                        string destinationFilePath = Path.Combine(destinationDirectory, newFileName);
-
-                        try
-                        {
-                            // Copy the selected file to the destination directory
-                            // Set overwrite to true to replace an existing file with the same name.
-                            File.Copy(selectedFilePath, destinationFilePath, true);
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Error copying file: " + ex.Message);
-                        }
-                    }
-                }
-
-
-            }
-
-            else if (active_TreeNode().Game != null)
-            {
-
-                if (active_TreeNode().Game.Video != null)
-                    OpenFile(Path.Combine(active_TreeNode().Tag_ConsolePath, active_TreeNode().Game.Video));
-                else
-                    MessageBox.Show("No Video Found", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-        //void OpenScrapeSettings()
-        //{
-        //    sss.ShowDialog();
-        //}
-        //void OpenGlobalSettings()
-        //{
-        //    global.ShowDialog();
-        //}
-        //void OpenDownloadSettings()
-        //{
-        //    dls.ShowDialog();
-        //}
-        //public void OpenGameListSettings()
-        //{
-        //    gls.ProcessValues();
-        //    gls.ShowDialog();
-        //}
         TreeNodeDetail active_TreeNode()
         {
             return tv_ActiveRomDir.SelectedNode as TreeNodeDetail;
@@ -1005,7 +725,7 @@ namespace ScrapeEdit
 
             foreach (var systemDir in Directory.GetDirectories(basePath))
             {
-                string systemName = new DirectoryInfo(systemDir).Name.ToLower(); // Get console folder name
+                string systemName = new DirectoryInfo(systemDir).Name.ToLower();
                 string infoFilePath = Path.Combine(systemDir, "_info.txt");
 
                 if (File.Exists(infoFilePath))
@@ -1015,57 +735,26 @@ namespace ScrapeEdit
                     {
                         if (line.StartsWith("ROM files extensions accepted:"))
                         {
-                            string extPart = line.Split('"')[1].Trim(); // Extracts the text inside quotes
-                            extPart = extPart.Replace(" ", ",");
+                            string extPart = line.Split('"')[1].Trim(); // Extract text inside quotes
 
-                            if (!string.IsNullOrEmpty(extPart))
+                            // Split, trim, and remove empty extensions
+                            var cleaned = extPart
+                                .Replace(" ", ",")
+                                .Split(',')
+                                .Select(e => e.Trim().ToLowerInvariant())
+                                .Where(e => !string.IsNullOrWhiteSpace(e));
+
+                            if (cleaned.Any())
                             {
-                                ValidEXT[systemName] = extPart;
+                                ValidEXT[systemName] = string.Join(",", cleaned);
                             }
                         }
                     }
                 }
                 else if (!ValidEXT.ContainsKey(systemName))
                 {
-                    // If no _info.txt and system not in ValidEXT, do not load files
                     ValidEXT[systemName] = "";
                 }
-            }
-        }
-
-        private async void setRootDirToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            using (FolderBrowserDialog dialog = new FolderBrowserDialog())
-            {
-                if (dialog.ShowDialog() != DialogResult.OK)
-                    return;
-
-                romDir = dialog.SelectedPath;
-                if (string.IsNullOrEmpty(romDir))
-                    return;
-
-                //GameListManager.gameLists = new Dictionary<string, GameList>();
-                appSettings.SetRomDir(romDir);
-
-                // hide main, show loading
-                this.Hide();
-                using var loadingForm = new Form_Loading();
-                loadingForm.Show();
-
-                var progress = new Progress<StatusInfo>(info =>
-                    loadingForm.UpdateStatus(info.Message, info.Current, info.Total, info.Percent)
-                );
-                var fileProgress = new Progress<FileProgressInfo>(info =>
-                    loadingForm.UpdateFileProgress(info.Current, info.Total)
-                );
-
-                // run the long work on background thread
-                await Task.Run(() => PopulateTreeView(progress, fileProgress));
-
-                // close loading, show main
-                loadingForm.Close();
-                this.Show();
-
             }
         }
 
@@ -1077,11 +766,12 @@ namespace ScrapeEdit
                 tv_ActiveRomDir.Nodes.Clear();
             });
 
-            DirectoryInfo rootDir = new DirectoryInfo(romDir);
+            DirectoryInfo rootDir = new DirectoryInfo(SessionSettings.RomDirectory);
             TreeNodeDetail rootNode = new TreeNodeDetail(rootDir.Name) { Tag = rootDir };
-            Invoke(() => tv_ActiveRomDir.Nodes.Add(rootNode));
 
+            Invoke(() => tv_ActiveRomDir.Nodes.Add(rootNode));
             SetValidEXT(rootDir.FullName);
+
             var consoleDirs = rootDir.GetDirectories();
             int totalConsoles = consoleDirs.Length;
             int consoleIndex = 0;
@@ -1090,7 +780,6 @@ namespace ScrapeEdit
             {
                 consoleIndex++;
                 string consoleKey = consoleDir.Name.ToLowerInvariant();
-                if (!ValidEXT.ContainsKey(consoleKey)) continue;
 
                 progress?.Report(new StatusInfo($"Processing: {consoleDir.Name}", consoleIndex, totalConsoles, consoleIndex * 100 / totalConsoles));
 
@@ -1103,8 +792,32 @@ namespace ScrapeEdit
 
                 Invoke(() => rootNode.Nodes.Add(consoleNode));
 
+                // ✅ MISSING INFO.TXT HANDLING HERE:
+                if (!ValidEXT.ContainsKey(consoleKey) || string.IsNullOrWhiteSpace(ValidEXT[consoleKey]))
+                {
+                    TreeNodeDetail errorNode = new TreeNodeDetail("Missing _info.txt")
+                    {
+                        ForeColor = Color.Red,
+                        isSubDir = false,
+                        Tag_ConsolePath = consoleDir.FullName,
+                        Tag = "Error"
+
+                    };
+
+                    Invoke(() =>
+                    {
+                        consoleNode.Nodes.Clear();
+                        consoleNode.Nodes.Add(errorNode);
+                    });
+
+                    continue; // ⛔ Skip further processing for this console
+                }
+
                 HashSet<string> validExts = ValidEXT[consoleKey]
-                    .Split(',').Select(e => e.Trim().ToLowerInvariant()).ToHashSet();
+                    .Split(',')
+                    .Select(e => e.Trim().ToLowerInvariant())
+                    .Where(e => !string.IsNullOrWhiteSpace(e))
+                    .ToHashSet();
 
                 string gamelistPath = Path.Combine(consoleDir.FullName, "gamelist.xml");
                 GameList gameList = File.Exists(gamelistPath)
@@ -1126,7 +839,6 @@ namespace ScrapeEdit
                     string fullPath = Path.GetFullPath(Path.Combine(consoleDir.FullName, relativePath));
                     if (!File.Exists(fullPath) && !Directory.Exists(fullPath)) continue;
 
-                    // Add normalized relative path for deduplication
                     string normalizedRelPath = Path.GetRelativePath(consoleDir.FullName, fullPath).Replace("\\", "/");
                     if (!loadedPaths.Add(normalizedRelPath)) continue;
 
@@ -1147,7 +859,9 @@ namespace ScrapeEdit
                             {
                                 isSubDir = true,
                                 Tag_FullPath = Path.Combine(consoleDir.FullName, Path.Combine(pathParts.Take(i + 1).ToArray())),
-                                Tag_ConsolePath = consoleDir.FullName
+                                Tag_ConsolePath = consoleDir.FullName,
+                                ImageKey = "blank",
+                                SelectedImageKey = "blank"
                             };
 
                             Invoke(() => currentParent.Nodes.Add(subdirNode));
@@ -1165,12 +879,12 @@ namespace ScrapeEdit
                         Tag = fullPath,
                         Tag_FullPath = fullPath,
                         Game = scraped,
-                        Tag_ConsolePath = consoleDir.FullName
+                        Tag_ConsolePath = consoleDir.FullName,
+                        ImageKey = "blank",
+                        SelectedImageKey = "blank"
                     };
 
-                    UpdateGameNodeLabel(gameNode);
-
-                    SetNodeGrayIfIncomplete(gameNode);
+                    NodeUtility.SetNodeText_Color(gameNode);
                     Invoke(() => currentParent.Nodes.Add(gameNode));
 
                     gameIndex++;
@@ -1179,21 +893,69 @@ namespace ScrapeEdit
 
                 AddMissingRomNodes(consoleDir, consoleNode, validExts, loadedPaths, gameList, fileProgress, ref gameIndex, ref gameTotal);
 
-                Invoke(new Action(() =>
-                {
-                    SortTreeNodesAlphabetically(consoleNode);
-                }));
-
+                Invoke(() => SortTreeNodesAlphabetically(consoleNode));
                 GameListManager.WriteGameListToFile(consoleNode);
             }
 
             Invoke(() =>
             {
                 TrimTreeViewNodes(rootNode);
+                foreach (TreeNodeDetail tnd in rootNode.Nodes.Cast<TreeNodeDetail>())
+                {
+                    AttachConsoleMetadata(tnd);
+                }
+
                 rootNode.Expand();
                 tv_ActiveRomDir.EndUpdate();
             });
         }
+
+        private void AttachConsoleMetadata(TreeNodeDetail consoleNode)
+        {
+            if (consoleNode == null || !consoleNode.isConsole)
+                return;
+
+            int id = Convert.ToInt32(ConsoleIDHandler.GetConsoleID(consoleNode.Tag_ConsoleName));
+            if (id < 0)
+                return;
+
+            var scrapedConsole = consoleList.GetConsoleById(id);
+            if (scrapedConsole == null)
+                return;
+
+            scrapedConsole.TreeName = consoleNode.Tag_ConsoleName;
+            consoleNode.Console = scrapedConsole;
+
+            if (scrapedConsole.IconImg != null)
+            {
+                string iconKey = consoleNode.Tag_ConsoleName;
+
+                // Add image to shared ImageList if not already present
+                if (!nodeImageList.Images.ContainsKey(iconKey))
+                {
+                    try
+                    {
+                        nodeImageList.Images.Add(iconKey, scrapedConsole.IconImg);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to add icon for '{iconKey}': {ex.Message}");
+                        return;
+                    }
+                }
+
+                // Assign icon ONLY to the console node
+                consoleNode.ImageKey = consoleNode.SelectedImageKey = iconKey;
+            }
+            else
+            {
+                // Remove icon assignment if it was set before (clean fallback)
+                consoleNode.ImageKey = null;
+                consoleNode.SelectedImageKey = null;
+            }
+        }
+
+
         void TrimTreeViewNodes(TreeNodeDetail parentNode)
         {
             foreach (TreeNodeDetail node in parentNode.Nodes.Cast<TreeNodeDetail>().ToList())
@@ -1204,21 +966,7 @@ namespace ScrapeEdit
                 }
             }
         }
-        private void UpdateGameNodeLabel(TreeNodeDetail node)
-        {
-            if (node.Game == null) return;
 
-            string baseName = node.Game.Name ?? Path.GetFileNameWithoutExtension(node.Tag_FullPath);
-            if (node.Game.Favorite)
-                baseName += " 💖";
-            if (node.Game.Hidden)
-                baseName += " 🚫";
-
-            node.Text = baseName;
-
-            if (node.Game.Name == node.Text)
-                node.ForeColor = Color.Black;
-        }
         private void AddMissingRomNodes(DirectoryInfo folder, TreeNodeDetail parentNode,
             HashSet<string> validExts, HashSet<string> loadedPaths,
             GameList gameList,
@@ -1244,6 +992,10 @@ namespace ScrapeEdit
                 {
                     string fullPath = entry.FullName;
 
+                    if (entry.Name == "PC10" || entry.Name == "Crash 'n Burn (USA)")
+                    { 
+                        string test = "";
+                    }
                     ScrapedGame sg = new ScrapedGame
                     {
                         Name = Path.GetFileNameWithoutExtension(entry.Name),
@@ -1255,10 +1007,12 @@ namespace ScrapeEdit
                         Tag = fullPath,
                         Tag_FullPath = fullPath,
                         Game = sg,
-                        Tag_ConsolePath = consolePath
+                        Tag_ConsolePath = consolePath,
+                        ImageKey = "blank",
+                        SelectedImageKey = "blank"
                     };
 
-                    SetNodeGrayIfIncomplete(gameNode);
+                    NodeUtility.SetNodeText_Color(gameNode);
                     Invoke(() => parentNode.Nodes.Add(gameNode));
                     gameList.AddGame(sg);
 
@@ -1296,23 +1050,6 @@ namespace ScrapeEdit
             }
         }
 
-        private void SetNodeGrayIfIncomplete(TreeNodeDetail node)
-        {
-            if (node.Game == null || node.isSubDir || node.isConsole) return;
-
-            bool missingAssets = string.IsNullOrWhiteSpace(node.Game.Image) ||
-                                 !File.Exists(Path.Combine(node.Tag_ConsolePath, node.Game.Image?.TrimStart('.', '/', '\\')));
-
-            bool missingDescription = string.IsNullOrWhiteSpace(node.Game.Description);
-            bool hasExtension = !string.IsNullOrWhiteSpace(Path.GetExtension(node.Tag_FullPath));
-
-            bool badDescription = missingDescription && !hasExtension;
-
-            if (missingAssets || badDescription)
-            {
-                node.ForeColor = Color.Gray;
-            }
-        }
         private bool FolderContainsValidFiles(DirectoryInfo folder, HashSet<string> validExtensions)
         {
             return folder.EnumerateFiles("*", SearchOption.AllDirectories)
@@ -1334,7 +1071,7 @@ namespace ScrapeEdit
         }
         private void Tv_ActiveRomDir_AfterExpand(object sender, TreeViewEventArgs e)
         {
-            // Collapse all sibling nodes when a node is expanded
+            // Collapse all sibling nodes
             if (e.Node.Parent != null)
             {
                 foreach (TreeNode sibling in e.Node.Parent.Nodes)
@@ -1346,16 +1083,18 @@ namespace ScrapeEdit
                 }
             }
 
+            // Select and focus the expanded node
+            tv_ActiveRomDir.SelectedNode = e.Node;
+            e.Node.EnsureVisible(); // optional: scroll into view
+            tv_ActiveRomDir.Focus();
+
             DeselectAllNodes();
         }
 
         private void singleToolStripMenuItem_Click(object sender, EventArgs e)
         {
-
             scrapeNodeToolStripMenuItem_Click(sender, e);
-
         }
-
         void GetAllCheckedNodes(TreeNodeCollection nodes, List<TreeNode> checkedNodes)
         {
 
@@ -1372,13 +1111,10 @@ namespace ScrapeEdit
                 GetAllCheckedNodes(node.Nodes, checkedNodes);
             }
         }
-
-        bool scrapeInProgress = false;
-
         private async void ScrapeSingleOrMulti(TreeNode[] nodes)
         {
             TreeNodeDetail[] detailNodes = nodes.Cast<TreeNodeDetail>().ToArray();
-            if (!GameFileProcessor.SetValuesFirst(seRomDir, ssa, ValidEXT)) return;
+            if (!GameFileProcessor.SetValuesFirst(ssa, ValidEXT)) return;
 
             Form_DownloadProgress progressForm = new Form_DownloadProgress();
             progressForm.SetTotal(detailNodes.Length);
@@ -1391,19 +1127,8 @@ namespace ScrapeEdit
 
             await RunScrapes(detailNodes, progressForm); // ✅ This starts and completes the full scrape process.
 
-            //GameListManager.WriteGameListToFile(scrapedNodes[0]);
-
             scrapeInProgress = false;
-            //MessageBox.Show("Scraping Complete!");
         }
-
-
-        private Queue<TreeNodeDetail> scrapeQueue;
-        private List<TreeNodeDetail> scrapedNodes;
-        private int activeScrapes;
-        private readonly int maxConcurrency = 4;
-        private Form_DownloadProgress progressForm;
-
         public async Task RunScrapes(TreeNodeDetail[] nodes, Form_DownloadProgress progressForm)
         {
             this.progressForm = progressForm;
@@ -1449,17 +1174,18 @@ namespace ScrapeEdit
                     gameList.ScrapedGames.RemoveAll(g =>
                     {
                         string relPath = g.Path.Replace("./", "").Replace("/", "\\");
-                        string fullPath = Path.Combine(romDir, consoleKey, relPath);
+                        string fullPath = Path.Combine(SessionSettings.RomDirectory, consoleKey, relPath);
                         return !File.Exists(fullPath);
                     });
 
                     // Write the cleaned gamelist
-                    string consolePath = Path.Combine(romDir, consoleKey);
+                    string consolePath = Path.Combine(SessionSettings.RomDirectory, consoleKey);
                     TreeNodeDetail dummy = new TreeNodeDetail()
                     {
                         Tag_ConsolePath = consolePath
                     };
 
+                    
 
                     GameListManager.WriteGameListToFile(dummy);
                 }
@@ -1524,7 +1250,6 @@ namespace ScrapeEdit
                 panel.RaiseScrapeCompleted();
             }
         }
-
         private void SortTreeNodesAlphabetically(TreeNodeDetail consoleNode)
         {
             var sorted = consoleNode.Nodes.Cast<TreeNode>()
@@ -1534,15 +1259,11 @@ namespace ScrapeEdit
             consoleNode.Nodes.Clear();
             consoleNode.Nodes.AddRange(sorted);
         }
-
         void PostScrapeUpdates(TreeNodeDetail node)
         {
-
-            GameListManager.PostProcess(node, seRomDir);
-            UpdateGameNodeLabel(node);
-
+            GameListManager.PostProcess(node);//, SessionSettings.RomDirectory);
+            NodeUtility.SetNodeText_Color(node);
         }
-
         private void toolStripMenuItem2_Click(object sender, EventArgs e) //M3U
         {
             //string checks = active_TreeNodeName();
@@ -1565,9 +1286,6 @@ namespace ScrapeEdit
                     gamePaths.Add(n.Tag_ConsoleRomPath.TrimStart('\\'));
             }
 
-
-
-
             //get all nodes that are checked
             //send them to the m3u form for editing then send back for processing
             if (checkedNodes.Length > 1)
@@ -1578,25 +1296,26 @@ namespace ScrapeEdit
 
                 if (dr == DialogResult.OK)
                 {
-                    CreateM3U.CreateM3UFile(Path.Combine(romDir, node.Tag_ConsoleName, node.Tag_ConsolePath));
-                    string fullPathNew = Path.Combine(romDir, node.Tag_ConsoleName, M3USettings.fileNameM3U) + ".m3u";
-
-                    //if(node.Tag_SubDirPath != null)
-                    //    fullPathNew = Path.Combine(romDir, node.Tag_ConsoleName, node.Tag_SubDirPath, M3USettings.fileNameM3U)+".m3u";
+                    CreateM3U.CreateM3UFile(Path.Combine(SessionSettings.RomDirectory, node.Tag_ConsoleName, node.Tag_ConsolePath));
+                    string fullPathNew = Path.Combine(SessionSettings.RomDirectory, node.Tag_ConsoleName, M3USettings.fileNameM3U) + ".m3u";
 
                     TreeNodeDetail m3uNode = new TreeNodeDetail(M3USettings.fileNameM3U)
                     {
                         Tag_FullPath = fullPathNew,
 
-                        Game = new ScrapedGame() { Name = M3USettings.fileNameM3U },
+                        Game = new ScrapedGame()
+                        {
+                            Name = M3USettings.fileNameM3U,
+                            Path = Path.GetFileName(fullPathNew)
+                        },
                         Text = M3USettings.fileNameM3U + ".m3u",
                         Tag_ConsolePath = node.Tag_ConsolePath,
+
                     };
 
                     if (M3USettings.copyMetaData)
                     {
                         m3uNode.Game = node.Game.Clone(m3uNode.Tag_RelativePath);
-                        // m3uNode.Game.Path = m3uNode.Tag_RelativePath;
 
                     }
 
@@ -1614,8 +1333,16 @@ namespace ScrapeEdit
                     TreeNode consoleNode = ReturnConsoleNodeFromChild(node);
                     consoleNode.Nodes.Add(m3uNode);
 
+                    NodeUtility.SetNodeText_Color(m3uNode);
+
+                    SortTreeNodesAlphabetically(consoleNode as TreeNodeDetail);
+
                     GameListManager.UpdateGameListEntry(m3uNode);
                     GameListManager.WriteGameListToFile(m3uNode);
+
+                    tv_ActiveRomDir.SelectedNode = m3uNode; // Select the new M3U node
+                    tv_ActiveRomDir.Focus();
+
                 }
                 DeselectAllNodes();
 
@@ -1667,194 +1394,14 @@ namespace ScrapeEdit
             GetAllCheckedNodes(tv_ActiveRomDir.Nodes, checkedNodes);
             return checkedNodes.ToArray();
         }
-
         private void testCodeToolStripMenuItem_Click(object sender, EventArgs e)
         {
             //ssa.TestCredentials();
         }
-
         private void exitToolStripMenuItem_Click(object sender, EventArgs e)
         {
-
             Application.Exit();
         }
-
-        private Image LoadThumbnailImage(string imgPath, int maxWidth, int maxHeight)
-        {
-            // Load the file into a byte array so the file is closed immediately.
-            byte[] imageBytes = File.ReadAllBytes(imgPath);
-            using (var ms = new MemoryStream(imageBytes))
-            {
-                using (Image original = Image.FromStream(ms))
-                {
-                    // Calculate the scale factor to fit the image within the maximum dimensions.
-                    float scale = Math.Min((float)maxWidth / original.Width, (float)maxHeight / original.Height);
-                    int thumbWidth = (int)(original.Width * scale);
-                    int thumbHeight = (int)(original.Height * scale);
-
-                    // Create a new bitmap with the calculated dimensions.
-                    Bitmap thumb = new Bitmap(thumbWidth, thumbHeight);
-                    using (Graphics g = Graphics.FromImage(thumb))
-                    {
-                        // Set high-quality interpolation.
-                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-                        g.DrawImage(original, new Rectangle(0, 0, thumbWidth, thumbHeight));
-                    }
-                    return thumb;
-                }
-            }
-        }
-
-        // Helper method to extract the image type label from a file name.
-        private string GetImageTypeLabel(string imgPath)
-        {
-            string fileName = Path.GetFileNameWithoutExtension(imgPath);
-            // Split the filename on dashes.
-            var parts = fileName.Split('-');
-            if (parts.Length >= 2)
-            {
-                // If there are at least three parts, join the last two tokens.
-                string typeLabel = parts.Length >= 3
-                    ? $"{parts[parts.Length - 2]} {parts[parts.Length - 1]}"
-                    : parts[parts.Length - 1];
-                return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(typeLabel.ToLower());
-            }
-            return "Unknown";
-        }
-        string clickedImgPath = ""; // store selected image path globally
-
-        private void btn_Main_ShowAllImages_Click(object sender, EventArgs e)
-        {
-            TreeNodeDetail node = active_TreeNode();
-            if (!Path.Exists(seRomDir)) return;
-
-            Form formImages = new Form { Text = "All Images", Size = new Size(850, 600), StartPosition = FormStartPosition.CenterScreen, AutoScroll = true };
-            List<string> imgPaths = new();
-            string searchPattern = $"*{node.FileName}*.png";
-            string[] files = Directory.Exists(seRomDir) ? Directory.GetFiles(seRomDir, searchPattern, SearchOption.AllDirectories) : Array.Empty<string>();
-            if (files.Length == 0)
-                files = Directory.GetFiles(node.Tag_ConsolePath, searchPattern, SearchOption.AllDirectories);
-            if (files.Length == 0)
-            {
-                MessageBox.Show("No images found.");
-                return;
-            }
-
-            imgPaths.AddRange(files.Where(f => f.Contains(node.FileName)));
-
-            int x = 10, y = 10;
-            foreach (string imgPath in imgPaths)
-            {
-                PictureBox pictureBox = new PictureBox
-                {
-                    Size = new Size(250, 250),
-                    Location = new Point(x, y),
-                    SizeMode = PictureBoxSizeMode.CenterImage,
-                    Image = LoadThumbnailImage(imgPath, 250, 250),
-                    Tag = imgPath
-                };
-
-                pictureBox.MouseUp += PictureBox_MouseUp; // assign context menu handler
-                formImages.Controls.Add(pictureBox);
-
-                formImages.Controls.Add(new Label
-                {
-                    Text = GetImageTypeLabel(imgPath),
-                    AutoSize = false,
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Size = new Size(250, 20),
-                    Location = new Point(x, y + 250)
-                });
-
-                x += 260;
-                if (x > formImages.ClientSize.Width - 250) { x = 10; y += 270; }
-            }
-
-            formImages.ShowDialog();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-        }
-
-        private void PictureBox_MouseUp(object? sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Right && editingInProgress)
-            {
-                PictureBox pic = sender as PictureBox;
-                clickedImgPath = pic.Tag.ToString();
-
-                var contextMenu = new ContextMenuStrip();
-                contextMenu.Items.Add("Main", null, (s, ea) => SetGameImage("Main"));
-                contextMenu.Items.Add("Thumbnail", null, (s, ea) => SetGameImage("Thumbnail"));
-                contextMenu.Items.Add("Marquee", null, (s, ea) => SetGameImage("Marquee"));
-                contextMenu.Show(Cursor.Position);
-            }
-        }
-
-        private void SetGameImage(string type)
-        {
-            if (string.IsNullOrEmpty(clickedImgPath)) return;
-
-            TreeNodeDetail node = active_TreeNode();
-            if (node.Game == null)
-                node.Game = new ScrapedGame() { Path = node.Tag_RelativePath };
-
-            string destDir = Path.Combine(node.Tag_ConsolePath, "images");
-            Directory.CreateDirectory(destDir);
-
-            string suffix = type == "Main" ? "-image.png" :
-                            type == "Thumbnail" ? "-thumb.png" :
-                            "-marquee.png";
-
-            string destFileName = node.FileName + suffix;
-            string destPath = Path.Combine(destDir, destFileName);
-
-            try
-            {
-                File.Copy(clickedImgPath, destPath, true); // overwrite = true
-
-                string relPath = Path.Combine("./images", destFileName).Replace("\\", "/");
-
-                if (type == "Main")
-                {
-                    node.Game.Image = relPath;
-                    if (node.Game.Description != "")
-                    {
-                        node.ForeColor = Color.Black;
-                        node.BackColor = Color.White;
-                    }
-                }
-                else if (type == "Thumbnail")
-                    node.Game.Thumbnail = relPath;
-                else
-                    node.Game.Marquee = relPath;
-
-                //MessageBox.Show($"{type} image set successfully.");
-                PopulateDisplayArea();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to assign image: {ex.Message}");
-            }
-        }
-
-        //private void setSEDirToolStripMenuItem_Click(object sender, EventArgs e)
-        //{
-        //    using (FolderBrowserDialog dialog = new FolderBrowserDialog())
-        //    {
-        //        if (dialog.ShowDialog() == DialogResult.OK)
-        //        {
-        //            seRomDir = dialog.SelectedPath + "\\roms\\";
-        //            Directory.CreateDirectory(seDir);
-
-        //            if (!string.IsNullOrEmpty(seDir))
-        //            {
-        //                appSettings.SetSEDir(seDir);
-        //            }
-        //        }
-        //    }
-        //}
 
         private void devModeOffToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -1873,9 +1420,6 @@ namespace ScrapeEdit
 
 
         }
-
-        private SettingsControlPanel settingsPanel;
-
         void OpenSettingsControlPanel()
         {
             // Avoid adding multiple instances
@@ -1891,14 +1435,15 @@ namespace ScrapeEdit
             {
                 if (msg[0])
                 {
-                    romDir = appSettings.RomDirectory;
+                    appSettings.Save();
                     InitializeTreeViewLoading();
                 }
-                if (msg[1]) 
+                if (msg[1])
                 {
-                   Update_SE_DIRs( appSettings.SEDirectory);
+                    appSettings.Save();
                 }
             };
+
 
 
             this.Controls.Add(settingsPanel);
@@ -1908,8 +1453,6 @@ namespace ScrapeEdit
             gameToolStripMenuItem.Enabled = false;
             settingsToolStripMenuItem1.Enabled = false;
         }
-
-
         private void SettingsPanel_OnCloseRequested()
         {
             if (settingsPanel != null)
@@ -1923,14 +1466,51 @@ namespace ScrapeEdit
                 settingsToolStripMenuItem1.Enabled = true;
             }
         }
-
-
-
         private void settingsToolStripMenuItem1_Click(object sender, EventArgs e)
         {
             OpenSettingsControlPanel();
-
         }
+
+        private async void dLConsoleDataToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            string region = GlobalDefaults.DefaultRegionAbrv ?? "wor";
+
+            foreach (ScrapedConsole sc in consoleList.ScrapedConsoles)
+            {
+                TreeNodeDetail tempNode = new TreeNodeDetail()
+                {
+                    isConsole = true,
+                    Console = sc,
+                    Tag_ConsolePath = Path.Combine(SessionSettings.SettingsFolder, "Cache","Consoles", sc.ShortName)
+                };
+
+                if (Directory.Exists(tempNode.Tag_ConsolePath)) //skips if the directory already exists
+                    continue;
+
+                foreach (var kvp in sc.Media.MediaByType)
+                {
+                    // Skip media types not in the desired list
+                    if (!sc.DesiredConsoleMediaTypes.Contains(kvp.Key))
+                        continue;
+
+                    var preferred = sc.Media.GetPreferred(kvp.Key, region);
+                    if (preferred == null)
+                        continue;
+
+                    tool_StatusLabel.Text = $"Downloading {preferred.Type} for {sc.Name}";
+
+
+
+                    await MediaDownloader.DownloadAndSaveMediaAsync(
+                        ObfuscateDevCredentials.DeObfuscate(preferred.Url),
+                        preferred.Type,
+                        preferred.Format,
+                        tempNode
+                    );
+                }
+            }
+        }
+
     }
 }
 
