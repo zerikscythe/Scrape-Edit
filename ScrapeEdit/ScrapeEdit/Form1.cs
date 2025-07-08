@@ -127,6 +127,8 @@ namespace ScrapeEdit
         }
         async void FormStartup()
         {
+            this.Icon = Properties.Resources.xml_Wiz;
+
             //appSettings
             appSettings = new AppSettings();
             appSettings.Load();
@@ -1178,16 +1180,16 @@ namespace ScrapeEdit
                         return !File.Exists(fullPath);
                     });
 
-                    // Write the cleaned gamelist
+
+                    //Write the cleaned gamelist
                     string consolePath = Path.Combine(SessionSettings.RomDirectory, consoleKey);
                     TreeNodeDetail dummy = new TreeNodeDetail()
                     {
                         Tag_ConsolePath = consolePath
                     };
 
-                    
-
                     GameListManager.WriteGameListToFile(dummy);
+
                 }
             }
 
@@ -1246,7 +1248,7 @@ namespace ScrapeEdit
             {
                 // you no longer need to re-check UseHash here,
                 // since the onRenamed callback already did the filename+color swap.
-                PostScrapeUpdates(node);
+                await PostScrapeUpdates(node);
                 panel.RaiseScrapeCompleted();
             }
         }
@@ -1259,11 +1261,25 @@ namespace ScrapeEdit
             consoleNode.Nodes.Clear();
             consoleNode.Nodes.AddRange(sorted);
         }
-        void PostScrapeUpdates(TreeNodeDetail node)
+        private async Task PostScrapeUpdates(TreeNodeDetail node)
         {
-            GameListManager.PostProcess(node);//, SessionSettings.RomDirectory);
-            NodeUtility.SetNodeText_Color(node);
+            await Task.Run(() =>
+            {
+                GameListManager.PostProcess(node); // background work: I/O, game processing
+            });
+
+            // UI-bound update must run on UI thread
+            if (InvokeRequired)
+            {
+                Invoke(() => NodeUtility.SetNodeText_Color(node));
+            }
+            else
+            {
+                NodeUtility.SetNodeText_Color(node);
+            }
         }
+
+
         private void toolStripMenuItem2_Click(object sender, EventArgs e) //M3U
         {
             //string checks = active_TreeNodeName();
