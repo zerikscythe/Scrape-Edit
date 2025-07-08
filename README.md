@@ -90,6 +90,8 @@ Thanks, ZerikScythe
 > 🔐 If compiling this software yourself, you **must provide your own** ScreenScraper Dev ID and Key.  
 > These are stored securely and never committed to source control.
 
+I've also included a prescraped console list and data folder in the download section. please use these if you like (might need them honestly).
+
 ---
 
 ## 📝 Notes
