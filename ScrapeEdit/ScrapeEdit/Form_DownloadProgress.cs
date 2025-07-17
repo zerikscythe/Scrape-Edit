@@ -96,7 +96,7 @@
             {
                 if (btn_CC.Text == "Cancel")
                 {
-                    btn_CC.Enabled = false;
+                    //btn_CC.Enabled = false;
                     _cts.Cancel();
                 }
                 else

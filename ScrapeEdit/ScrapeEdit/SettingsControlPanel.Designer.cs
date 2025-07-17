@@ -62,7 +62,7 @@ namespace ScrapeEdit
             chk_SS_CRC32 = new CheckBox();
             chk_SS_MD5 = new CheckBox();
             chk_SS_SHA1 = new CheckBox();
-            chk_SS_30Day = new CheckBox();
+            chk_SS_useCached_XML = new CheckBox();
             gb_SCP_Scrape = new GroupBox();
             tb_SSL_Username = new TextBox();
             tb_SSL_Password = new TextBox();
@@ -88,11 +88,15 @@ namespace ScrapeEdit
             lbl_Global_lang = new Label();
             gb_SCP_Global = new GroupBox();
             gb_SCP_Directory = new GroupBox();
+            chk_Settings_Update = new CheckBox();
             btn_DIR_AppDir = new Button();
             lbl_DIR_Cache = new Label();
             lbl_DIR_Root = new Label();
             btn_SCP_Cache = new Button();
             btn_DIR_Root = new Button();
+            tb_SS_DaysOld = new TextBox();
+            tb_SS_MaxThreads = new TextBox();
+            lbl_SS_MaxThreads = new Label();
             gb_SCP_Download.SuspendLayout();
             gb_SCP_Scrape.SuspendLayout();
             gb_SCP_Login.SuspendLayout();
@@ -261,7 +265,7 @@ namespace ScrapeEdit
             chk_DLS_box_2d.Location = new Point(6, 300);
             chk_DLS_box_2d.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_2d.Name = "chk_DLS_box_2d";
-            chk_DLS_box_2d.Size = new Size(64, 19);
+            chk_DLS_box_2d.Size = new Size(65, 19);
             chk_DLS_box_2d.TabIndex = 15;
             chk_DLS_box_2d.Text = "box-2D";
             chk_DLS_box_2d.UseVisualStyleBackColor = true;
@@ -272,7 +276,7 @@ namespace ScrapeEdit
             chk_DLS_box_2d_side.Location = new Point(6, 320);
             chk_DLS_box_2d_side.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_2d_side.Name = "chk_DLS_box_2d_side";
-            chk_DLS_box_2d_side.Size = new Size(90, 19);
+            chk_DLS_box_2d_side.Size = new Size(91, 19);
             chk_DLS_box_2d_side.TabIndex = 16;
             chk_DLS_box_2d_side.Text = "box-2D-side";
             chk_DLS_box_2d_side.UseVisualStyleBackColor = true;
@@ -283,7 +287,7 @@ namespace ScrapeEdit
             chk_DLS_box_2d_back.Location = new Point(6, 340);
             chk_DLS_box_2d_back.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_2d_back.Name = "chk_DLS_box_2d_back";
-            chk_DLS_box_2d_back.Size = new Size(94, 19);
+            chk_DLS_box_2d_back.Size = new Size(95, 19);
             chk_DLS_box_2d_back.TabIndex = 17;
             chk_DLS_box_2d_back.Text = "box-2D-back";
             chk_DLS_box_2d_back.UseVisualStyleBackColor = true;
@@ -294,7 +298,7 @@ namespace ScrapeEdit
             chk_DLS_box_texture.Location = new Point(6, 360);
             chk_DLS_box_texture.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_texture.Name = "chk_DLS_box_texture";
-            chk_DLS_box_texture.Size = new Size(86, 19);
+            chk_DLS_box_texture.Size = new Size(88, 19);
             chk_DLS_box_texture.TabIndex = 18;
             chk_DLS_box_texture.Text = "box-texture";
             chk_DLS_box_texture.UseVisualStyleBackColor = true;
@@ -305,7 +309,7 @@ namespace ScrapeEdit
             chk_DLS_box_3d.Location = new Point(6, 380);
             chk_DLS_box_3d.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_box_3d.Name = "chk_DLS_box_3d";
-            chk_DLS_box_3d.Size = new Size(64, 19);
+            chk_DLS_box_3d.Size = new Size(65, 19);
             chk_DLS_box_3d.TabIndex = 19;
             chk_DLS_box_3d.Text = "box-3D";
             chk_DLS_box_3d.UseVisualStyleBackColor = true;
@@ -316,7 +320,7 @@ namespace ScrapeEdit
             chk_DLS_mixrbv1.Location = new Point(6, 400);
             chk_DLS_mixrbv1.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_mixrbv1.Name = "chk_DLS_mixrbv1";
-            chk_DLS_mixrbv1.Size = new Size(68, 19);
+            chk_DLS_mixrbv1.Size = new Size(69, 19);
             chk_DLS_mixrbv1.TabIndex = 20;
             chk_DLS_mixrbv1.Text = "mixrbv1";
             chk_DLS_mixrbv1.UseVisualStyleBackColor = true;
@@ -327,7 +331,7 @@ namespace ScrapeEdit
             chk_DLS_mixrbv2.Location = new Point(6, 420);
             chk_DLS_mixrbv2.Margin = new Padding(3, 2, 3, 2);
             chk_DLS_mixrbv2.Name = "chk_DLS_mixrbv2";
-            chk_DLS_mixrbv2.Size = new Size(68, 19);
+            chk_DLS_mixrbv2.Size = new Size(69, 19);
             chk_DLS_mixrbv2.TabIndex = 21;
             chk_DLS_mixrbv2.Text = "mixrbv2";
             chk_DLS_mixrbv2.UseVisualStyleBackColor = true;
@@ -447,27 +451,30 @@ namespace ScrapeEdit
             chk_SS_SHA1.Text = "Use SHA1";
             chk_SS_SHA1.UseVisualStyleBackColor = true;
             // 
-            // chk_SS_30Day
+            // chk_SS_useCached_XML
             // 
-            chk_SS_30Day.AutoSize = true;
-            chk_SS_30Day.Location = new Point(6, 125);
-            chk_SS_30Day.Name = "chk_SS_30Day";
-            chk_SS_30Day.Size = new Size(170, 19);
-            chk_SS_30Day.TabIndex = 5;
-            chk_SS_30Day.Text = "SS Data <30 days use cache";
-            chk_SS_30Day.UseVisualStyleBackColor = true;
+            chk_SS_useCached_XML.AutoSize = true;
+            chk_SS_useCached_XML.Location = new Point(6, 125);
+            chk_SS_useCached_XML.Name = "chk_SS_useCached_XML";
+            chk_SS_useCached_XML.Size = new Size(165, 19);
+            chk_SS_useCached_XML.TabIndex = 5;
+            chk_SS_useCached_XML.Text = "SS Data <X days use cache";
+            chk_SS_useCached_XML.UseVisualStyleBackColor = true;
             // 
             // gb_SCP_Scrape
             // 
+            gb_SCP_Scrape.Controls.Add(lbl_SS_MaxThreads);
+            gb_SCP_Scrape.Controls.Add(tb_SS_MaxThreads);
+            gb_SCP_Scrape.Controls.Add(tb_SS_DaysOld);
             gb_SCP_Scrape.Controls.Add(chk_SS_CRC32);
-            gb_SCP_Scrape.Controls.Add(chk_SS_30Day);
+            gb_SCP_Scrape.Controls.Add(chk_SS_useCached_XML);
             gb_SCP_Scrape.Controls.Add(chk_SS_Rename);
             gb_SCP_Scrape.Controls.Add(chk_SS_SHA1);
             gb_SCP_Scrape.Controls.Add(chk_SS_Prompt);
             gb_SCP_Scrape.Controls.Add(chk_SS_MD5);
             gb_SCP_Scrape.Location = new Point(277, 9);
             gb_SCP_Scrape.Name = "gb_SCP_Scrape";
-            gb_SCP_Scrape.Size = new Size(200, 166);
+            gb_SCP_Scrape.Size = new Size(200, 233);
             gb_SCP_Scrape.TabIndex = 25;
             gb_SCP_Scrape.TabStop = false;
             gb_SCP_Scrape.Text = "Scrape Settings";
@@ -525,7 +532,7 @@ namespace ScrapeEdit
             gb_SCP_Login.Controls.Add(tb_SSL_Password);
             gb_SCP_Login.Location = new Point(3, 9);
             gb_SCP_Login.Name = "gb_SCP_Login";
-            gb_SCP_Login.Size = new Size(268, 166);
+            gb_SCP_Login.Size = new Size(268, 175);
             gb_SCP_Login.TabIndex = 26;
             gb_SCP_Login.TabStop = false;
             gb_SCP_Login.Text = "Login Settings";
@@ -610,7 +617,7 @@ namespace ScrapeEdit
             lbl_GLS_Thumb.AutoSize = true;
             lbl_GLS_Thumb.Location = new Point(6, 61);
             lbl_GLS_Thumb.Name = "lbl_GLS_Thumb";
-            lbl_GLS_Thumb.Size = new Size(65, 15);
+            lbl_GLS_Thumb.Size = new Size(64, 15);
             lbl_GLS_Thumb.TabIndex = 7;
             lbl_GLS_Thumb.Text = "Thumbnail";
             // 
@@ -699,17 +706,28 @@ namespace ScrapeEdit
             // 
             // gb_SCP_Directory
             // 
+            gb_SCP_Directory.Controls.Add(chk_Settings_Update);
             gb_SCP_Directory.Controls.Add(btn_DIR_AppDir);
             gb_SCP_Directory.Controls.Add(lbl_DIR_Cache);
             gb_SCP_Directory.Controls.Add(lbl_DIR_Root);
             gb_SCP_Directory.Controls.Add(btn_SCP_Cache);
             gb_SCP_Directory.Controls.Add(btn_DIR_Root);
-            gb_SCP_Directory.Location = new Point(3, 181);
+            gb_SCP_Directory.Location = new Point(3, 244);
             gb_SCP_Directory.Name = "gb_SCP_Directory";
-            gb_SCP_Directory.Size = new Size(474, 107);
+            gb_SCP_Directory.Size = new Size(474, 108);
             gb_SCP_Directory.TabIndex = 29;
             gb_SCP_Directory.TabStop = false;
             gb_SCP_Directory.Text = "Directory Settings";
+            // 
+            // chk_Settings_Update
+            // 
+            chk_Settings_Update.AutoSize = true;
+            chk_Settings_Update.Location = new Point(12, 82);
+            chk_Settings_Update.Name = "chk_Settings_Update";
+            chk_Settings_Update.Size = new Size(120, 19);
+            chk_Settings_Update.TabIndex = 30;
+            chk_Settings_Update.Text = "Check For Update";
+            chk_Settings_Update.UseVisualStyleBackColor = true;
             // 
             // btn_DIR_AppDir
             // 
@@ -758,6 +776,31 @@ namespace ScrapeEdit
             btn_DIR_Root.Text = "ROMs Dir";
             btn_DIR_Root.UseVisualStyleBackColor = true;
             btn_DIR_Root.Click += btn_DIR_Root_Click;
+            // 
+            // tb_SS_DaysOld
+            // 
+            tb_SS_DaysOld.Location = new Point(6, 145);
+            tb_SS_DaysOld.Name = "tb_SS_DaysOld";
+            tb_SS_DaysOld.Size = new Size(41, 23);
+            tb_SS_DaysOld.TabIndex = 7;
+            tb_SS_DaysOld.Text = "30";
+            // 
+            // tb_SS_MaxThreads
+            // 
+            tb_SS_MaxThreads.Location = new Point(6, 192);
+            tb_SS_MaxThreads.Name = "tb_SS_MaxThreads";
+            tb_SS_MaxThreads.Size = new Size(41, 23);
+            tb_SS_MaxThreads.TabIndex = 9;
+            tb_SS_MaxThreads.Text = "5";
+            // 
+            // lbl_SS_MaxThreads
+            // 
+            lbl_SS_MaxThreads.AutoSize = true;
+            lbl_SS_MaxThreads.Location = new Point(6, 174);
+            lbl_SS_MaxThreads.Name = "lbl_SS_MaxThreads";
+            lbl_SS_MaxThreads.Size = new Size(136, 15);
+            lbl_SS_MaxThreads.TabIndex = 5;
+            lbl_SS_MaxThreads.Text = "Max Concurrent Scrapes";
             // 
             // SettingsControlPanel
             // 
@@ -818,7 +861,7 @@ namespace ScrapeEdit
         private CheckBox chk_SS_CRC32;
         private CheckBox chk_SS_MD5;
         private CheckBox chk_SS_SHA1;
-        private CheckBox chk_SS_30Day;
+        private CheckBox chk_SS_useCached_XML;
         private GroupBox gb_SCP_Scrape;
         //for Login
         private TextBox tb_SSL_Username;
@@ -855,6 +898,10 @@ namespace ScrapeEdit
         private Button btn_DIR_Root;
         private Button btn_DIR_AppDir;
         private Button btn_SSL_Save;
+        private CheckBox chk_Settings_Update;
+        private TextBox tb_SS_DaysOld;
+        private Label lbl_SS_MaxThreads;
+        private TextBox tb_SS_MaxThreads;
     }
     #endregion
 }

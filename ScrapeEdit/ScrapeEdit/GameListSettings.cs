@@ -6,7 +6,7 @@ namespace ScrapeEdit
     { 
         public string MainImage { get; set; } = "box-2D";
         public string Thumbnail {  get; set; } = "box-3D";
-        public string Marquee { get; set; } = "screenmarquee";
+        public string Marquee { get; set; } = "wheel";
         public string Video { get; set; } = "video-normalized";
         public bool Manual { get; set; } = true;
 
@@ -34,7 +34,7 @@ namespace ScrapeEdit
             return XML_ImageLocations[Thumbnail];
         }
 
-        public static string Marquee { get; set; } = "screenmarquee";
+        public static string Marquee { get; set; } = "wheel";
 
         public static string MarqueeXML()
         {

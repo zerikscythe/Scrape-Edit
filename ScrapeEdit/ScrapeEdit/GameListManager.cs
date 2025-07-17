@@ -6,7 +6,6 @@ namespace ScrapeEdit
     public static class GameListManager
     {
         public static Dictionary<string, GameList> gameLists = new Dictionary<string, GameList>();
-
         public static ScrapedGame ConvertSSXmlToScrapedGame(string xmlData, TreeNodeDetail node = null)
         {
             var scrapedGame = new ScrapedGame();
@@ -121,7 +120,6 @@ namespace ScrapeEdit
         }
         public static void MoveMediaToLocalDir(
         TreeNodeDetail node, 
-        //string seDir, 
         string oldFileName = null)
         {
             // purge the old art first (if renaming occurred)
@@ -270,15 +268,14 @@ namespace ScrapeEdit
             string xmlData = gameList.CreateNewGameListFromScrapedGames();
             File.WriteAllText(xmlPath, xmlData);
         }
-
         public static void PostProcess(TreeNodeDetail node)//, string seDir)
         {
             MoveMediaToLocalDir(node); //, seDir);
             node.Game = SetImageLinks(node);
             UpdateGameListEntry(node);
+            //WriteGameListToFile(node);
         }
-
-        private static ScrapedGame SetImageLinks(TreeNodeDetail node)
+        public static ScrapedGame SetImageLinks(TreeNodeDetail node)
         {
             ScrapedGame sg = node.Game;
             string fileName = node.FileName;
@@ -297,7 +294,6 @@ namespace ScrapeEdit
 
             return sg;
         }
-
         private static string FormatPath(string directory, string fileName, string fileType)
         {
             return Path.Combine(directory, $"{fileName}-{fileType}").Replace("\\", "/");

@@ -54,6 +54,9 @@ namespace ScrapeEdit
 
         public static string GetConsoleID(string console)
         {
+            if (!consoleIds.ContainsKey(console))
+                return null;
+
             return consoleIds[console][0];
         }
         public static string GetConsoleNameFull(string console)

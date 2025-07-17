@@ -27,6 +27,7 @@ namespace ScrapeEdit
         private ToolStripMenuItem createM3UToolStripMenuItem;
         private ToolStripMenuItem rebuildMediaToolStripMenuItem;
         private ToolStripMenuItem extensionFixToolStripMenuItem;
+        private ToolStripMenuItem openFileLocationToolStripMenuItem;
 
         private bool suppressCheckboxEvent = false;
 
@@ -43,14 +44,17 @@ namespace ScrapeEdit
         private Queue<TreeNodeDetail> scrapeQueue;
         private List<TreeNodeDetail> scrapedNodes;
         private int activeScrapes;
-        private readonly int maxConcurrency = 8;
         private Form_DownloadProgress progressForm;
 
         private async void Form1_Shown(object sender, EventArgs e)
         {
+            if(SessionSettings.CheckForUpdateOnStartup)
+                await CheckForUpdateAsync();
+
             if (string.IsNullOrWhiteSpace(SessionSettings.RomDirectory))
             {
                 MessageBox.Show("Please select a ROM directory!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                this.Opacity = 1;
                 return;
             }
 
@@ -64,6 +68,7 @@ namespace ScrapeEdit
         }
         private async void InitializeTreeViewLoading()
         {
+            this.Opacity = 0;
             form_Loading = new Form_Loading();
             form_Loading.Show();
 
@@ -79,7 +84,6 @@ namespace ScrapeEdit
 
             try
             {
-                this.Hide();
                 consoleList = new ConsoleList();
                 await Task.Run(() => PopulateTreeView(progress, fileProgress));
             }
@@ -94,7 +98,7 @@ namespace ScrapeEdit
             finally
             {
                 form_Loading.Invoke(new Action(() => form_Loading.Close()));
-                this.Show();
+                this.Opacity = 1;
             }
         }
         private void SetupConsoleIDs()
@@ -117,15 +121,7 @@ namespace ScrapeEdit
             }
 
         }
-        public Form1()
-        {
-            InitializeComponent();
-            SetupConsoleIDs();
-            SetupTreeView();
-            FormStartup();
-            this.Shown += Form1_Shown;
-        }
-        async void FormStartup()
+        private void LoadSettingsData()
         {
             this.Icon = Properties.Resources.xml_Wiz;
 
@@ -134,6 +130,47 @@ namespace ScrapeEdit
             appSettings.Load();
 
             ssa = new ScreenScraperApi();
+        }
+        
+        public Form1()
+        {
+            this.Opacity = 0;
+
+            InitializeComponent();
+            LoadSettingsData();
+            SetupConsoleIDs();
+            SetupTreeView();
+            FormStartup();
+            this.Shown += Form1_Shown;
+            
+        }
+        private async Task CheckForUpdateAsync()
+        {
+            string current = GitHubUpdate.CleanVersionString(Application.ProductVersion);
+            string? latest = await GitHubUpdate.GetLatestTagAsync();
+
+            if (GitHubUpdate.IsUpdateAvailable(current, latest))
+            {
+                DialogResult result = MessageBox.Show(
+                    $"A new version is available!\n\nCurrent version: {current}\nLatest version: {latest}\n\nWould you like to download the update now?",
+                    "Update Available",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information,
+                    MessageBoxDefaultButton.Button1);
+
+                if (result == DialogResult.Yes)
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = $"https://github.com/zerikscythe/Scrape-Edit/releases/tag/{latest}",
+                        UseShellExecute = true
+                    });
+                }
+            }
+        }
+        async void FormStartup()
+        {
+
 
             // Ensure contextMenuTreeView is initialized before assigning it
 
@@ -144,17 +181,18 @@ namespace ScrapeEdit
             scrapeNodeToolStripMenuItem = new ToolStripMenuItem("Scrape");
             rebuildMediaToolStripMenuItem = new ToolStripMenuItem("Rebuild Media");
             renameNodeToolStripMenuItem = new ToolStripMenuItem("Rename");
+            openFileLocationToolStripMenuItem = new ToolStripMenuItem("Open File Location");
             createM3UToolStripMenuItem = new ToolStripMenuItem("Create M3U");
             deleteMasterNodeToolStripMenuItem = new ToolStripMenuItem("Delete Master Data");
             viewXMLNodeToolStripMenuItem = new ToolStripMenuItem("View Raw XML");
             deleteNodeToolStripMenuItem = new ToolStripMenuItem("Delete File(s)");
-
             extensionFixToolStripMenuItem = new ToolStripMenuItem("Fix Extensions");
-
+            
 
             // Add items to context menu
             contextMenuTreeView.Items.Add(scrapeNodeToolStripMenuItem);
             contextMenuTreeView.Items.Add(rebuildMediaToolStripMenuItem);
+            contextMenuTreeView.Items.Add(openFileLocationToolStripMenuItem);
             contextMenuTreeView.Items.Add(createM3UToolStripMenuItem);
             contextMenuTreeView.Items.Add(viewXMLNodeToolStripMenuItem);
             contextMenuTreeView.Items.Add(renameNodeToolStripMenuItem);
@@ -175,30 +213,48 @@ namespace ScrapeEdit
             scrapeNodeToolStripMenuItem.Click += scrapeNodeToolStripMenuItem_Click;
             createM3UToolStripMenuItem.Click += CreateM3UToolStripMenuItem_Click;
             rebuildMediaToolStripMenuItem.Click += RebuildMediaToolStripMenuItem_Click;
-
+            openFileLocationToolStripMenuItem.Click += OpenFileLocation_Click;
             extensionFixToolStripMenuItem.Click += ExtensionFixToolStripMenuItem_Click;
 
         }
-
+        private void OpenFileLocation_Click(object? sender, EventArgs e)
+        {
+            NodeUtility.OpenFileLocation( NodeUtility.Active_TreeNode(tv_ActiveRomDir) );
+        }
         private void ExtensionFixToolStripMenuItem_Click(object? sender, EventArgs e)
         {
-            TreeNodeDetail node = active_TreeNode();
+            TreeNodeDetail node = NodeUtility.Active_TreeNode(tv_ActiveRomDir);
 
-            if (node == null || !node.isConsole || node.Console == null)
+            if (node == null)
             {
-                MessageBox.Show("Please select a valid console node with metadata.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Please select a valid node.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
+            if(node.Console == null)
+            {
+                node = NodeUtility.ReturnConsoleNodeFromChild(node);
+            }
             // 1. Try to get known extensions from ScrapedConsole
             string[] ext = node.Console.Extensions ?? [];
 
             // 2. Format into space-separated string like: .iso .chd .cue
-            string prefill = string.Join(" ", ext.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e =>
+            string prefill = "";
+
+            if (ValidEXT.TryGetValue(node.Tag_ConsoleName.ToLowerInvariant(), out string validExt))
             {
-                var trimmed = e.Trim();
-                return trimmed.StartsWith(".") ? trimmed : "." + trimmed;
-            }));
+                prefill = string.Join(" ", validExt.Split(',')
+                    .Select(e => e.Trim())
+                    .Where(e => !string.IsNullOrWhiteSpace(e))
+                    .Select(e => e.StartsWith(".") ? e : "." + e));
+            }
+            else
+            { 
+                prefill = string.Join(" ", ext.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e =>
+                {
+                    var trimmed = e.Trim();
+                    return trimmed.StartsWith(".") ? trimmed : "." + trimmed;
+                }));
+            }
 
             // 3. Prompt user
             string result = Microsoft.VisualBasic.Interaction.InputBox(
@@ -213,7 +269,6 @@ namespace ScrapeEdit
                 return;
             }
 
-            // 4. Write _info.txt to parent directory
             try
             {
                 string systemPath = node.Tag_ConsolePath;
@@ -224,18 +279,44 @@ namespace ScrapeEdit
                 }
 
                 string infoFilePath = Path.Combine(systemPath, "_info.txt");
-                string content = $"ROM files extensions accepted: \"{result.Trim()}\"";
+                string newLine = $"ROM files extensions accepted: \"{result.Trim()}\"";
 
-                File.WriteAllText(infoFilePath, content);
+                List<string> lines = new();
 
-                MessageBox.Show("_info.txt created successfully.\nPlease reload the ROM directory.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (File.Exists(infoFilePath))
+                {
+                    lines = File.ReadAllLines(infoFilePath).ToList();
+
+                    bool replaced = false;
+                    for (int i = 0; i < lines.Count; i++)
+                    {
+                        if (lines[i].StartsWith("ROM files extensions accepted:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            lines[i] = newLine;
+                            replaced = true;
+                            break;
+                        }
+                    }
+
+                    if (!replaced)
+                        lines.Add(newLine); // append if not found
+                }
+                else
+                {
+                    // New file, just create with our one line
+                    lines.Add(newLine);
+                }
+
+                File.WriteAllLines(infoFilePath, lines);
+
+                MessageBox.Show("_info.txt updated successfully.\nPlease reload the ROM directory.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error writing _info.txt: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error writing _info.txt:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-        }
 
+        }
         private void ContextMenuTreeView_Opening(object sender, CancelEventArgs e)
         {
             var selectedNode = tv_ActiveRomDir.SelectedNode;
@@ -260,58 +341,20 @@ namespace ScrapeEdit
                 }
             }
         }
-
         private void viewXMLNodeToolStripMenuItem_Click(object? sender, EventArgs e)
         {
-            Form_XML_Editor xmlEditor = new Form_XML_Editor(active_TreeNode());
+            Form_XML_Editor xmlEditor = new Form_XML_Editor(NodeUtility.Active_TreeNode(tv_ActiveRomDir));
             xmlEditor.ShowDialog();
 
         }
-        void Rebuild(bool local, TreeNodeDetail node)
-        {
-            if (local)
-            {
-                if (File.Exists(Path.Combine(node.Tag_ConsolePath, "images", node.FileName + "-image.png")))
-                {
-                    node.Game.Name = Path.GetFileNameWithoutExtension(node.Text);
-                    node.Game.Path = node.Tag_RelativePath;
-                    GameListManager.PostProcess(node);
-                    GameListManager.WriteGameListToFile(node);
-
-                    //PopulateDisplayArea();
-                }
-                else
-                {
-                    MessageBox.Show("No local image found!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-            else   //search for SE data
-            {
-                string pathToXML = SessionSettings.SEDirectory_ROM + "\\" + node.Tag_ConsoleName + node.Tag_ConsoleRomPath + ".xml";
-                try
-                {
-                    if (!File.Exists(pathToXML))
-                    {
-                        MessageBox.Show("No XML data found for this game!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Error accessing XML file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                string xmlData = File.ReadAllText(pathToXML, Encoding.UTF8);
-                node.Game = GameListManager.ConvertSSXmlToScrapedGame(xmlData, node);
-                PostScrapeUpdates(node);
-            }
-
-            //PopulateDisplayArea();
-        }
         private void RebuildMediaToolStripMenuItem_Click(object? sender, EventArgs e)
         {
-            TreeNode[] selectedNodes = GetSelectedNodes();
+            TreeNode[] selectedNodes = NodeUtility
+                                        .GetCheckedNodes(tv_ActiveRomDir.Nodes, n => !n.isConsole && !n.isSubDir)
+                                        .Cast<TreeNode>()
+                                        .ToArray();
+
+
             if (selectedNodes.Length == 0)
             {
                 MessageBox.Show("No games selected.");
@@ -339,11 +382,10 @@ namespace ScrapeEdit
             {
                 if (node is TreeNodeDetail detail && !detail.isConsole && !detail.isSubDir)
                 {
-                    Rebuild(useLocal, detail);
+                    NodeUtility.Rebuild(useLocal, detail);
                 }
             }
         }
-
         private void CreateM3UToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             toolStripMenuItem2_Click(sender, e);
@@ -375,19 +417,17 @@ namespace ScrapeEdit
             tv_ActiveRomDir.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
             Controls.Add(tv_ActiveRomDir);
         }
-
         private void tv_CHK_BeforeCheck(object sender, TreeViewCancelEventArgs e)
         {
             TreeNodeDetail node = e.Node as TreeNodeDetail;
 
             // Prevent unchecking the currently active node
-            if (node == active_TreeNode() && node.Checked && !node.isConsole)
+            if (node == NodeUtility.Active_TreeNode(tv_ActiveRomDir) && node.Checked && !node.isConsole)
             {
                 e.Cancel = true;
                 return;
             }
         }
-
         private void TV_CHK_NodeSelection(object sender, TreeViewEventArgs e)
         {
             TreeNodeDetail node = e.Node as TreeNodeDetail;
@@ -403,11 +443,11 @@ namespace ScrapeEdit
                     if (node.Checked)
                     {
                         node.Expand();
-                        SetChildNodesChecked(node, true);
+                        NodeUtility.SetChildNodesChecked(node, true);
                     }
                     else
                     {
-                        SetChildNodesChecked(node, false);
+                        NodeUtility.SetChildNodesChecked(node, false);
                     }
                 }
 
@@ -417,16 +457,6 @@ namespace ScrapeEdit
                 suppressCheckboxEvent = false;
             }
         }
-
-        private void SetChildNodesChecked(TreeNode node, bool isChecked)
-        {
-            foreach (TreeNode child in node.Nodes)
-            {
-                child.Checked = isChecked;
-                SetChildNodesChecked(child, isChecked);
-            }
-        }
-
         private void TV_GameNodeSelect(object sender, TreeViewEventArgs e)
         {
             TreeNodeDetail node = e.Node as TreeNodeDetail;
@@ -450,9 +480,9 @@ namespace ScrapeEdit
             if (node == null)
                 return;
 
-            DeselectAllNodes();
+            NodeUtility.DeselectAllNodes(tv_ActiveRomDir);
 
-            if (!node.isConsole)
+            if (!node.isConsole && node.Parent != null)
             {
                 node.Checked = true;
                 GameGrid gameGrid = new GameGrid(node);
@@ -494,13 +524,20 @@ namespace ScrapeEdit
             }
             if (!SessionSettings.editingInProgress)
             { 
-                if(active_TreeNode().isConsole)//select all children nodes 1st
+                TreeNodeDetail node = NodeUtility.Active_TreeNode(tv_ActiveRomDir);
+
+                if (node.isConsole)//select all children nodes 1st
                 {
-                    active_TreeNode().Expand();
-                    SetChildNodesChecked(active_TreeNode(), true);
+                    node.Expand();
+                    NodeUtility.SetChildNodesChecked(node, true);
                 }
 
-                ScrapeSingleOrMulti(GetSelectedNodes()); 
+                ScrapeSingleOrMulti(
+                     NodeUtility
+                    .GetCheckedNodes(tv_ActiveRomDir.Nodes, n => !n.isConsole && !n.isSubDir)
+                    .Cast<TreeNode>()
+                    .ToArray()
+                    ); 
             
             }
             else
@@ -509,7 +546,7 @@ namespace ScrapeEdit
         }
         private void renameNodeToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            TreeNodeDetail node = active_TreeNode();
+            TreeNodeDetail node = NodeUtility.Active_TreeNode(tv_ActiveRomDir);
 
             if (node != null)
             {
@@ -569,7 +606,7 @@ namespace ScrapeEdit
 
                     Invoke(new Action(() =>
                     {
-                        SortTreeNodesAlphabetically(node.Parent as TreeNodeDetail);
+                        NodeUtility.SortTreeNodesAlphabetically(node.Parent as TreeNodeDetail);
                     }));
 
                     MessageBox.Show("Item successfully renamed.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -583,10 +620,10 @@ namespace ScrapeEdit
         private void deleteNodeToolStripMenuItem_Click(object sender, EventArgs e)
         {
             // 1. Gather all selected game nodes
-            var selected = GetSelectedNodes()
-                .OfType<TreeNodeDetail>()
-                .Where(n => !n.isConsole && !n.isSubDir)
-                .ToArray();
+            TreeNodeDetail[] selected = NodeUtility
+                                        .GetCheckedNodes(tv_ActiveRomDir.Nodes, n => !n.isConsole && !n.isSubDir)
+                                        .ToArray();
+
             if (selected.Length == 0) return;
 
             // 2. Confirm deletion
@@ -600,8 +637,7 @@ namespace ScrapeEdit
 
             foreach (var group in byConsole)
             {
-                // For each console:
-                //  a) delete files & update in-memory list
+                // a) delete files & update in-memory list
                 foreach (var node in group)
                 {
                     var path = node.Tag_FullPath;
@@ -614,21 +650,22 @@ namespace ScrapeEdit
                     GameListManager.PurgeOldMediaFiles(node);
                 }
 
-                //  b) rewrite console's gamelist.xml
-                //     find any one node in this group to get its console TreeNodeDetail
-                var consoleNode = ReturnConsoleNodeFromChild(group.First());
+                // b) rewrite console's gamelist.xml
+                var consoleNode = NodeUtility.ReturnConsoleNodeFromChild(group.First());
                 GameListManager.WriteGameListToFile(consoleNode);
 
-                //  c) remove the nodes from the TreeView
+                // c) remove the nodes from the TreeView
                 foreach (var node in group)
                     node.Remove();
             }
         }
         private void deleteMasterNodeToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (active_TreeNode() != null)
+            TreeNodeDetail node = NodeUtility.Active_TreeNode(tv_ActiveRomDir);
+
+            if (node != null)
             {
-                string filePath = active_TreeNode().Tag_FullPath;
+                string filePath = node.Tag_FullPath;
 
                 if (filePath == null || !File.Exists(filePath))
                 {
@@ -649,9 +686,6 @@ namespace ScrapeEdit
                 {
                     try
                     {
-                        // Delete the ROM file
-                        //File.Delete(filePath);
-
                         // Delete the XML file if it exists
                         if (File.Exists(xmlFilePath))
                         {
@@ -659,7 +693,7 @@ namespace ScrapeEdit
                         }
 
                         // Delete all associated media files
-                        DeleteMasterGameMetadata(active_TreeNode());
+                        DeleteMasterGameMetadata(node);
 
                         // Remove the node from TreeView
                         //tv_ActiveRomDir.SelectedNode.Remove();
@@ -716,11 +750,6 @@ namespace ScrapeEdit
                 }
             }
         }
-
-        TreeNodeDetail active_TreeNode()
-        {
-            return tv_ActiveRomDir.SelectedNode as TreeNodeDetail;
-        }
         void SetValidEXT(string basePath)
         {
             ValidEXT = new Dictionary<string, string>();
@@ -759,7 +788,6 @@ namespace ScrapeEdit
                 }
             }
         }
-
         public void PopulateTreeView(IProgress<StatusInfo> progress, IProgress<FileProgressInfo> fileProgress)
         {
             Invoke(() =>
@@ -782,6 +810,9 @@ namespace ScrapeEdit
             {
                 consoleIndex++;
                 string consoleKey = consoleDir.Name.ToLowerInvariant();
+
+                if (!ConsoleIDHandler.consoleIds.ContainsKey(consoleKey))
+                    continue;
 
                 progress?.Report(new StatusInfo($"Processing: {consoleDir.Name}", consoleIndex, totalConsoles, consoleIndex * 100 / totalConsoles));
 
@@ -895,21 +926,43 @@ namespace ScrapeEdit
 
                 AddMissingRomNodes(consoleDir, consoleNode, validExts, loadedPaths, gameList, fileProgress, ref gameIndex, ref gameTotal);
 
-                Invoke(() => SortTreeNodesAlphabetically(consoleNode));
+                Invoke(() => NodeUtility.SortTreeNodesAlphabetically(consoleNode));
                 GameListManager.WriteGameListToFile(consoleNode);
             }
 
             Invoke(() =>
             {
-                TrimTreeViewNodes(rootNode);
+                NodeUtility.TrimTreeViewNodes(rootNode);
                 foreach (TreeNodeDetail tnd in rootNode.Nodes.Cast<TreeNodeDetail>())
                 {
                     AttachConsoleMetadata(tnd);
                 }
 
+                AttachRootMetaData(rootNode);
+
                 rootNode.Expand();
                 tv_ActiveRomDir.EndUpdate();
             });
+        }
+
+        private void AttachRootMetaData(TreeNodeDetail rootNode)
+        {
+            Bitmap _main = new Bitmap(Path.Combine(SessionSettings.SEDirectory, "root", "banner.png"));
+            Bitmap _consoleWiz = new Bitmap(Path.Combine(SessionSettings.SEDirectory, "root", "wiz_xml.png"));
+            ScrapedConsole sc = new ScrapedConsole()
+            {
+                Name = "Scrape Edit",
+                TreeName = rootNode.Text,
+                MainImg = _main,
+                ConsoleImg = _consoleWiz,
+                YearStart = 2025,
+                Manufacturer = "ZerikScythe",
+                IconImg = this.Icon.ToBitmap(),
+            };
+            nodeImageList.Images.Add(sc.TreeName, sc.IconImg);
+            rootNode.ImageKey = rootNode.SelectedImageKey = sc.TreeName;
+            rootNode.isConsole = true;
+            rootNode.Console = sc;
         }
 
         private void AttachConsoleMetadata(TreeNodeDetail consoleNode)
@@ -956,19 +1009,6 @@ namespace ScrapeEdit
                 consoleNode.SelectedImageKey = null;
             }
         }
-
-
-        void TrimTreeViewNodes(TreeNodeDetail parentNode)
-        {
-            foreach (TreeNodeDetail node in parentNode.Nodes.Cast<TreeNodeDetail>().ToList())
-            {
-                if (node.isConsole && node.Nodes.Count == 0)
-                {
-                    parentNode.Nodes.Remove(node);
-                }
-            }
-        }
-
         private void AddMissingRomNodes(DirectoryInfo folder, TreeNodeDetail parentNode,
             HashSet<string> validExts, HashSet<string> loadedPaths,
             GameList gameList,
@@ -979,7 +1019,7 @@ namespace ScrapeEdit
             {
                 string ext = Path.GetExtension(entry.Name).ToLowerInvariant();
 
-                TreeNodeDetail consoleNode = ReturnConsoleNodeFromChild(parentNode);
+                TreeNodeDetail consoleNode = NodeUtility.ReturnConsoleNodeFromChild(parentNode);
                 string consolePath = consoleNode?.Tag_ConsolePath;
 
                 if (string.IsNullOrWhiteSpace(consolePath)) continue;
@@ -1057,20 +1097,6 @@ namespace ScrapeEdit
             return folder.EnumerateFiles("*", SearchOption.AllDirectories)
                 .Any(f => validExtensions.Contains(f.Extension.ToLower()));
         }
-        TreeNodeDetail ReturnConsoleNodeFromChild(TreeNodeDetail parentNode)
-        {
-            TreeNodeDetail grandparent = parentNode.Parent as TreeNodeDetail;
-
-            if (parentNode.isConsole)
-            {
-                return parentNode;
-            }
-            else
-            {
-                return ReturnConsoleNodeFromChild(grandparent);
-            }
-
-        }
         private void Tv_ActiveRomDir_AfterExpand(object sender, TreeViewEventArgs e)
         {
             // Collapse all sibling nodes
@@ -1090,33 +1116,28 @@ namespace ScrapeEdit
             e.Node.EnsureVisible(); // optional: scroll into view
             tv_ActiveRomDir.Focus();
 
-            DeselectAllNodes();
+            NodeUtility.DeselectAllNodes(tv_ActiveRomDir);
         }
-
         private void singleToolStripMenuItem_Click(object sender, EventArgs e)
         {
             scrapeNodeToolStripMenuItem_Click(sender, e);
-        }
-        void GetAllCheckedNodes(TreeNodeCollection nodes, List<TreeNode> checkedNodes)
-        {
-
-            foreach (TreeNode node in nodes)
-            {
-                TreeNodeDetail convertedNode = node as TreeNodeDetail;
-
-                // If the node is checked, add it to the list
-                if (convertedNode.Checked && !convertedNode.isConsole && !convertedNode.isSubDir)
-                {
-                    checkedNodes.Add(node);
-                }
-                // Also recurse into children
-                GetAllCheckedNodes(node.Nodes, checkedNodes);
-            }
         }
         private async void ScrapeSingleOrMulti(TreeNode[] nodes)
         {
             TreeNodeDetail[] detailNodes = nodes.Cast<TreeNodeDetail>().ToArray();
             if (!GameFileProcessor.SetValuesFirst(ssa, ValidEXT)) return;
+
+            //clean any previousl download form
+            foreach (Form openForm in Application.OpenForms.Cast<Form>().ToList())
+            {
+                if (openForm is Form_DownloadProgress f && !f.IsDisposed)
+                {
+                    f.Close();
+                    f.Dispose();
+                }
+            }
+
+
 
             Form_DownloadProgress progressForm = new Form_DownloadProgress();
             progressForm.SetTotal(detailNodes.Length);
@@ -1142,7 +1163,7 @@ namespace ScrapeEdit
             progressForm.SetTotal(nodes.Length);
 
             // Start up to maxConcurrency scrapes:
-            for (int i = 0; i < maxConcurrency && scrapeQueue.Count > 0; i++)
+            for (int i = 0; i < SessionSettings.MaxThreads && scrapeQueue.Count > 0; i++)
                 _ = StartNextScrapeAsync();
 
             // Wait until either:
@@ -1163,7 +1184,7 @@ namespace ScrapeEdit
 
                 Invoke(new Action(() =>
                 {
-                    SortTreeNodesAlphabetically(ReturnConsoleNodeFromChild(scrapedNodes[0]));
+                    NodeUtility.SortTreeNodesAlphabetically(NodeUtility.ReturnConsoleNodeFromChild(scrapedNodes[0]));
                 }));
 
 
@@ -1196,7 +1217,7 @@ namespace ScrapeEdit
         }
         private async Task StartNextScrapeAsync()
         {
-            if (scrapeQueue.Count == 0 || activeScrapes >= maxConcurrency)
+            if (scrapeQueue.Count == 0 || activeScrapes >= SessionSettings.MaxThreads)
                 return;
 
             TreeNodeDetail node = scrapeQueue.Dequeue();
@@ -1252,15 +1273,6 @@ namespace ScrapeEdit
                 panel.RaiseScrapeCompleted();
             }
         }
-        private void SortTreeNodesAlphabetically(TreeNodeDetail consoleNode)
-        {
-            var sorted = consoleNode.Nodes.Cast<TreeNode>()
-                .OrderBy(n => n.Text, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            consoleNode.Nodes.Clear();
-            consoleNode.Nodes.AddRange(sorted);
-        }
         private async Task PostScrapeUpdates(TreeNodeDetail node)
         {
             await Task.Run(() =>
@@ -1278,13 +1290,18 @@ namespace ScrapeEdit
                 NodeUtility.SetNodeText_Color(node);
             }
         }
-
-
         private void toolStripMenuItem2_Click(object sender, EventArgs e) //M3U
         {
-            //string checks = active_TreeNodeName();
 
-            TreeNode[] checkedNodes = GetSelectedNodes();
+
+           TreeNode[] checkedNodes = NodeUtility
+                                    .GetCheckedNodes(tv_ActiveRomDir.Nodes, n => !n.isConsole && !n.isSubDir)
+                                    .Cast<TreeNode>()
+                                    .ToArray();
+
+            if (checkedNodes.Length < 2)
+                return;
+
             TreeNodeDetail node = (TreeNodeDetail)checkedNodes[0];
 
             if (node.isConsole || node.isSubDir)
@@ -1346,12 +1363,12 @@ namespace ScrapeEdit
                     }
 
 
-                    TreeNode consoleNode = ReturnConsoleNodeFromChild(node);
+                    TreeNode consoleNode = NodeUtility.ReturnConsoleNodeFromChild(node);
                     consoleNode.Nodes.Add(m3uNode);
 
                     NodeUtility.SetNodeText_Color(m3uNode);
 
-                    SortTreeNodesAlphabetically(consoleNode as TreeNodeDetail);
+                    NodeUtility.SortTreeNodesAlphabetically(consoleNode as TreeNodeDetail);
 
                     GameListManager.UpdateGameListEntry(m3uNode);
                     GameListManager.WriteGameListToFile(m3uNode);
@@ -1360,55 +1377,12 @@ namespace ScrapeEdit
                     tv_ActiveRomDir.Focus();
 
                 }
-                DeselectAllNodes();
+                NodeUtility.DeselectAllNodes(tv_ActiveRomDir);
 
             }
             else
                 MessageBox.Show("Need to select multiple files to create an M3U file");
 
-        }
-        public void DeselectAllNodes()
-        {
-            foreach (TreeNode node in tv_ActiveRomDir.Nodes)
-            {
-                // If the node is checked, return it
-                if (node.Checked)
-                {
-                    node.Checked = false;
-                }
-
-                // Also recurse into children
-                foreach (TreeNode child in GetCheckedNodes(node.Nodes))
-                {
-                    child.Checked = false;
-                }
-            }
-        }
-        public static IEnumerable<TreeNode> GetCheckedNodes(TreeNodeCollection nodes)
-        {
-            foreach (TreeNode node in nodes)
-            {
-                TreeNodeDetail customNode = node as TreeNodeDetail;
-
-                // If the node is checked, return it
-                if (customNode.Checked)
-                {
-                    yield return customNode;
-                }
-
-                // Also recurse into children
-                foreach (TreeNode child in GetCheckedNodes(node.Nodes))
-                {
-                    TreeNodeDetail myChild = child as TreeNodeDetail;
-                    yield return myChild;
-                }
-            }
-        }
-        TreeNode[] GetSelectedNodes()
-        {
-            List<TreeNode> checkedNodes = new List<TreeNode>();
-            GetAllCheckedNodes(tv_ActiveRomDir.Nodes, checkedNodes);
-            return checkedNodes.ToArray();
         }
         private void testCodeToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -1418,7 +1392,6 @@ namespace ScrapeEdit
         {
             Application.Exit();
         }
-
         private void devModeOffToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (devModeOffToolStripMenuItem.Text.Contains("Off"))
@@ -1451,7 +1424,7 @@ namespace ScrapeEdit
             {
                 if (msg[0])
                 {
-                    appSettings.Save();
+                    //appSettings.Save();
                     InitializeTreeViewLoading();
                 }
                 if (msg[1])
@@ -1486,7 +1459,6 @@ namespace ScrapeEdit
         {
             OpenSettingsControlPanel();
         }
-
         private async void dLConsoleDataToolStripMenuItem_Click(object sender, EventArgs e)
         {
             string region = GlobalDefaults.DefaultRegionAbrv ?? "wor";

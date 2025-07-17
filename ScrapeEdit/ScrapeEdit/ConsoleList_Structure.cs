@@ -179,10 +179,66 @@ namespace ScrapeEdit
             "illustration"
         };
 
-        public Bitmap MainImg => GetMediaImg("logo-monochrome");
-        public Bitmap ConsoleImg => GetMediaImg("illustration");
-        public Bitmap ControllerImg => GetMediaImg("controller");
-        public Bitmap IconImg => GetMediaImg("icon");
+        private Bitmap _mainImg = null;
+        private Bitmap _consoleImg = null;
+        private Bitmap _controllerImg = null;
+        private Bitmap _iconImg = null;
+        public Bitmap MainImg 
+        {
+            get 
+            {
+                if (_mainImg != null)
+                    return _mainImg;
+                else 
+                    return GetMediaImg("logo-monochrome");
+            }
+            set 
+            { 
+                _mainImg = value; 
+            }
+        }
+        public Bitmap ConsoleImg
+        {
+            get
+            {
+                if (_consoleImg != null)
+                    return _consoleImg;
+                else
+                    return GetMediaImg("illustration");
+            }
+            set
+            {
+                _consoleImg = value;
+            }
+        }
+        public Bitmap ControllerImg
+        {
+            get
+            {
+                if (_controllerImg != null)
+                    return _controllerImg;
+                else
+                    return GetMediaImg("controller");
+            }
+            set
+            {
+                _controllerImg = value;
+            }
+        }
+        public Bitmap IconImg
+        {
+            get
+            {
+                if (_iconImg != null)
+                    return _iconImg;
+                else
+                    return GetMediaImg("icon");
+            }
+            set
+            {
+                _iconImg = value;
+            }
+        }
 
         public Bitmap GetMediaImg(string typeOf)
         {

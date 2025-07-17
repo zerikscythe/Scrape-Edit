@@ -8,7 +8,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
     <ForceDesignerDpiUnaware>true</ForceDesignerDpiUnaware>
+  <AssemblyVersion>0.6.3</AssemblyVersion>
+  <FileVersion>0.6.3</FileVersion>
+  <Version>0.6.3</Version>
+  <Product>ScrapeEdit</Product>
+  <ApplicationIcon>Resources\xml_Wiz.ico</ApplicationIcon>
+  <RepositoryUrl>https://github.com/zerikscythe/Scrape-Edit</RepositoryUrl>
+  <Copyright>2005</Copyright>
+  <PackageProjectUrl>https://github.com/zerikscythe/Scrape-Edit</PackageProjectUrl>
+  <PackageIcon>xml_Wiz_lrg.png</PackageIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\xml_Wiz.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Crc32.NET" Version="1.2.0" />
@@ -38,6 +51,10 @@
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <None Update="Resources\xml_Wiz_lrg.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
 

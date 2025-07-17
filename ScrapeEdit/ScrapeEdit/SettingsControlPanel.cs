@@ -12,12 +12,15 @@ namespace ScrapeEdit
             appSettings = appSet;
             this.ssa = ssa;
             InitializeComponent();
+
+            SetupHandlers_Update();
+            ProcessValues_Update();
+
             SetupHandlers_Download();
             SetupHandlers_GameList();
 
             ProcessChecks_Download();
             ProcessValues_GameList();
-
 
             Setup_Global();
             SetupHandlers_Scrape();
@@ -307,12 +310,45 @@ namespace ScrapeEdit
             chk_SS_Rename.CheckedChanged += Cb_SS_Rename_CheckedChanged;
             chk_SS_Prompt.CheckedChanged += Cb_SS_Prompt_CheckedChanged;
             chk_SS_SHA1.CheckedChanged += Chk_SS_SHA1_CheckedChanged;
-            chk_SS_30Day.CheckedChanged += Chk_SS_30Day_CheckedChanged;
+            chk_SS_useCached_XML.CheckedChanged += chk_SS_useCached_XML_CheckedChanged;
+            tb_SS_DaysOld.TextChanged += Tb_SS_DaysOld_TextChanged;
+            tb_SS_MaxThreads.TextChanged += Tb_SS_MaxThreads_TextChanged;
         }
 
-        private void Chk_SS_30Day_CheckedChanged(object? sender, EventArgs e)
+        private void Tb_SS_MaxThreads_TextChanged(object? sender, EventArgs e)
         {
-            ScrapeSettings._30Day = chk_SS_30Day.Checked;
+            if (int.TryParse(tb_SS_MaxThreads.Text.Trim(), out int value) && value > 0)
+            {
+                ScrapeSettings.MaxThreads = value;
+                tb_SS_MaxThreads.BackColor = SystemColors.Window; // reset color if valid
+            }
+            else
+            {
+                tb_SS_MaxThreads.BackColor = Color.MistyRose; // visually indicate error
+            }
+        }
+
+        private void Tb_SS_DaysOld_TextChanged(object? sender, EventArgs e)
+        {
+            if (int.TryParse(tb_SS_DaysOld.Text.Trim(), out int value) && value >= 0)
+            {
+                ScrapeSettings.X_Days = value;
+                tb_SS_DaysOld.BackColor = SystemColors.Window;
+            }
+            else
+            {
+                tb_SS_DaysOld.BackColor = Color.MistyRose;
+            }
+        }
+
+
+        private void chk_SS_useCached_XML_CheckedChanged(object? sender, EventArgs e)
+        {
+            ScrapeSettings.useCached_XML = chk_SS_useCached_XML.Checked;
+            if(ScrapeSettings.useCached_XML)
+                tb_SS_DaysOld.Enabled = true;
+            else
+                tb_SS_DaysOld.Enabled = false;
         }
 
         private bool suppressEvents = false; // Flag to prevent event recursion
@@ -384,7 +420,12 @@ namespace ScrapeEdit
             chk_SS_Prompt.Checked = ScrapeSettings.AskForClarity;
             chk_SS_MD5.Checked = ScrapeSettings.UseMD5;
             chk_SS_CRC32.Checked = ScrapeSettings.UseCRC32;
-            chk_SS_30Day.Checked = ScrapeSettings._30Day;
+            chk_SS_useCached_XML.Checked = ScrapeSettings.useCached_XML;
+            tb_SS_DaysOld.Text = ScrapeSettings.X_Days.ToString();
+            tb_SS_MaxThreads.Text = ScrapeSettings.MaxThreads.ToString();
+            if(!chk_SS_useCached_XML.Checked)
+                tb_SS_DaysOld.Enabled = false;
+
         }
 
 
@@ -479,9 +520,10 @@ namespace ScrapeEdit
 
         public void ProcessValues_Directory()
         {
-            lbl_DIR_Root.Text = SessionSettings.RomDirectory;
-            lbl_DIR_Cache.Text = SessionSettings.SettingsFolder;
+            lbl_DIR_Root.Text = SessionSettings.RomDirectory ?? "(not set)";
+            lbl_DIR_Cache.Text = SessionSettings.SettingsFolder ?? "(not set)";
         }
+
 
         private void btn_DIR_Root_Click(object sender, EventArgs e)
         {
@@ -495,9 +537,10 @@ namespace ScrapeEdit
 
                     if (result == DialogResult.Yes)
                     {
-                        appSettings.SetRomDir(folder);
+                        SessionSettings.RomDirectory = folder;
                         _ReloadTreeView = true;
                         ProcessValues_Directory();
+                        appSettings.Save();
                     }
                     else
                     { 
@@ -514,7 +557,7 @@ namespace ScrapeEdit
                 if (folder != SessionSettings.RomDirectory) //user can setup new location for roms
                 {
                     _Reload_SEDIR = true;
-                    appSettings.SetSEDir(folder);
+                    appSettings.SetSettingsDir(folder);
                     ProcessValues_Directory();
                 }
             }
@@ -545,5 +588,22 @@ namespace ScrapeEdit
         }
         #endregion Directory
 
+        #region Update
+        public void SetupHandlers_Update()
+        {
+            chk_Settings_Update.CheckedChanged += Chk_Settings_Update_CheckedChanged;
+        }
+
+        private void Chk_Settings_Update_CheckedChanged(object? sender, EventArgs e)
+        {
+            SessionSettings.CheckForUpdateOnStartup = chk_Settings_Update.Checked;
+        }
+
+        public void ProcessValues_Update()
+        {
+            chk_Settings_Update.Checked = SessionSettings.CheckForUpdateOnStartup;
+        }
+
+        #endregion Update
     }
 }

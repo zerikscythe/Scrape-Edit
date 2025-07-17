@@ -1,4 +1,5 @@
 ﻿using ScrapeEdit.Properties;
+using System.Net.NetworkInformation;
 using System.Text;
 using System.Windows.Forms;
 using System.Xml;
@@ -40,9 +41,7 @@ namespace ScrapeEdit
 
                 bool downloadMedia = true;
 
-                //ScraperData testData = ScraperXmlParser.Deserialize(GetXmlDataForNode(node, ref downloadMedia));
-
-                string xmlData = GetXmlDataForNode(node, ref downloadMedia);
+                string xmlData = await GetXmlDataForNodeAsync(node, downloadMedia);
                 if (xmlData == null)
                 {
                     report(100, "Scrape failed");
@@ -55,7 +54,6 @@ namespace ScrapeEdit
                 // Ensure romfilename and path are set based on rules (hash matching, fallback, etc.)
                 xmlData = ProcessNameChange(node, xmlData);
                 report(25, "Parsing metadata... Finished!");
-                Thread.Sleep(100);
 
                 // Determine if a rename is needed
                 string currentFileName = node.FileNameFull;
@@ -68,13 +66,16 @@ namespace ScrapeEdit
                 {
                     try
                     {
-                        RenameRomFile(node, xmlData);
+                        RenameRomFile(node, scrapedFileName);
+                        //update the UI to reflex the upcoming changes
+                        onRenamed(scrapedFileName);
                     }
                     catch (IOException ex)
                     {
                         MessageBox.Show($"Cannot rename ROM: {ex.Message}", "Rename Conflict", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return null;
                     }
+                    report(50, "Hash Found - File Renamed!");
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
@@ -82,11 +83,10 @@ namespace ScrapeEdit
                 var completedNode = await FinalizeGameMediaUpdate(
                     node, 
                     xmlData, 
-                    //renameNeeded ? originalFilename : null, 
                     cancellationToken);
 
                 report(100, "Scrape completed successfully!");
-                Thread.Sleep(500); // Allow UI to update before returning
+
 
                 return completedNode;
             }
@@ -111,9 +111,11 @@ namespace ScrapeEdit
             return cacheDir;
         }
 
-        private static string GetXmlDataForNode(
+        
+
+        private static async Task<string> GetXmlDataForNodeAsync(
             TreeNodeDetail node,
-            ref bool downloadMedia)
+            bool downloadMedia = true)
                 {
                     //string originalName = node.FileNameFull;
                     string originalCachePath = Path.Combine(GetCacheDir(node), node.FileNameFull + ".xml");
@@ -121,17 +123,17 @@ namespace ScrapeEdit
                     string xmlData = null;
 
                     // 2) Load from cache if it exists and is younger than 30 days
-                    if (ScrapeSettings._30Day &&
+                    if (ScrapeSettings.useCached_XML &&
                         File.Exists(originalCachePath) &&
-                        AgeOfCachedData(originalCachePath) <= 30)
+                        AgeOfCachedDataLessThan(originalCachePath))
                     {
-                        string loadedXml = File.ReadAllText(originalCachePath);
+                        xmlData = await File.ReadAllTextAsync(originalCachePath);
                         downloadMedia = false;
                     }
                     else
                     {
                         // 3) Attempt fresh scrape using filename-based lookup
-                        xmlData = ssa.GenerateXmlData(node);
+                        xmlData = await ssa.GenerateXmlDataAsync(node);
                     }
 
                     //deleted 4
@@ -150,11 +152,9 @@ namespace ScrapeEdit
                             // retry logic with new values
                         }
 
-                        //string title = PromptForGameTitle(node.FileName);
-
                         if (string.IsNullOrWhiteSpace(title)) return null;
 
-                        xmlData = ssa.GenerateXmlData(
+                        xmlData = await ssa.GenerateXmlDataAsync(
                             node,
                             title,
                             ConsoleID,
@@ -223,21 +223,19 @@ namespace ScrapeEdit
         }
 
 
-        private static void RenameRomFile(TreeNodeDetail node, string xmlData)
+        private static void RenameRomFile(TreeNodeDetail node, string newFileName)
         {
-            var doc = new XmlDocument();
-            doc.LoadXml(xmlData);
-
             
             string originalFilename = node.FileNameFull;
             string og_FN_Short = Path.GetFileNameWithoutExtension(originalFilename);
-            string newFilename = GetXML_FileName(doc);
 
-            string newFullPath = Path.Combine(node.Tag_ConsolePath, newFilename);
+            string newFullPath = Path.Combine(node.Tag_ConsolePath, newFileName);
+
             if (!string.Equals(node.Tag_FullPath, newFullPath, StringComparison.OrdinalIgnoreCase))
             {
                 if (File.Exists(newFullPath))
-                    throw new IOException($"A file named '{newFilename}' already exists.");
+                    throw new IOException($"A file named '{newFileName}' already exists.");
+
                 File.Move(node.Tag_FullPath, newFullPath);
                 node.Tag_FullPath = newFullPath;
             }
@@ -248,7 +246,6 @@ namespace ScrapeEdit
         private static async Task<TreeNodeDetail> FinalizeGameMediaUpdate(
             TreeNodeDetail node,
             string xmlData,
-            //string oldFilename,
             CancellationToken ct
         )
         {
@@ -257,33 +254,54 @@ namespace ScrapeEdit
                 node,
                 xmlData,
                 DownloadSettings.DownloadFilesTypes(),
-                ct//,
-                //oldFilename
+                ct
             );
 
             node.Game = GameListManager.ConvertSSXmlToScrapedGame(xmlData, node);
 
             return node;
         }
-
         private static (string title, string consoleID)? PromptForGameInfo(TreeNodeDetail node)
+        {
+            (string title, string consoleID)? result = null;
+
+            if (Application.OpenForms.Count > 0)
+            {
+                var mainForm = Application.OpenForms[0];
+                if (mainForm.InvokeRequired)
+                {
+                    mainForm.Invoke(new MethodInvoker(() =>
+                    {
+                        result = ShowPromptDialog(node);
+                    }));
+                }
+                else
+                {
+                    result = ShowPromptDialog(node);
+                }
+            }
+
+            return result;
+        }
+
+        private static (string title, string consoleID)? ShowPromptDialog(TreeNodeDetail node)
         {
             var consoleDict = ConsoleIDHandler.consoleIds
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.FirstOrDefault() ?? "");
 
             using (var form = new Form_ClarifyGameInfo(node.FileName, consoleDict))
             {
-                string defaultConsoleID = node.Tag_ConsoleID;
-
                 // Preselect the default console
-                ComboBox cb = form.Controls["cboConsole"] as ComboBox;
-                foreach (var item in cb.Items)
+                if (form.Controls["cboConsole"] is ComboBox cb)
                 {
-                    var pair = (KeyValuePair<string, string>)item;
-                    if (pair.Value == defaultConsoleID)
+                    foreach (var item in cb.Items)
                     {
-                        cb.SelectedItem = item;
-                        break;
+                        var pair = (KeyValuePair<string, string>)item;
+                        if (pair.Value == node.Tag_ConsoleID)
+                        {
+                            cb.SelectedItem = item;
+                            break;
+                        }
                     }
                 }
 
@@ -291,19 +309,27 @@ namespace ScrapeEdit
                 {
                     return (form.EnteredTitle, form.SelectedConsoleID);
                 }
-                return null;
             }
+
+            return null;
         }
 
-        private static int AgeOfCachedData(string filePath)
+        private static bool AgeOfCachedDataLessThan(string filePath)
         {
+            int fileAge = 0;
+            bool reply = false;
+
             if (File.Exists(filePath))
             {
                 DateTime creationTime = File.GetCreationTime(filePath);
                 TimeSpan age = DateTime.Now - creationTime;
-                return (int)age.TotalDays;
+                fileAge = (int)age.TotalDays;
             }
-            return 0;
+            
+            if(fileAge < SessionSettings.X_Days)
+                reply = true;
+
+            return reply;
         }
     }
 }

@@ -10,10 +10,8 @@ namespace ScapeEdit
     [XmlRoot("gameList")]
     public class GameList
     {
-
         [XmlElement("game")]
         public List<ScrapedGame> ScrapedGames = new List<ScrapedGame>();
-
         public void ConvertGLXmlToScrapedGame(string xmlData)
         {
             try
@@ -57,8 +55,6 @@ namespace ScapeEdit
             { }
 
         }
-
-
         public string CreateNewGameListFromScrapedGames()
         {
             // Create the root element.
@@ -101,7 +97,6 @@ namespace ScapeEdit
                 return stringWriter.ToString();
             }
         }
-
         public void AddGame(ScrapedGame sg)
         {
             ScrapedGame sgX = ScrapedGames.Find(x => x.Path == sg.Path);
@@ -110,8 +105,6 @@ namespace ScapeEdit
 
             ScrapedGames.Add(sg);
         }
-
-
         public GameList LoadGameListXML(string XMLfilePath)
         {
             try
@@ -134,13 +127,9 @@ namespace ScapeEdit
         }
     }
 
-    
-
     [XmlRoot("game")]
     public class ScrapedGame
     {
-
-
         [XmlElement("image")]
         public string Image { get; set; }
 
@@ -193,12 +182,11 @@ namespace ScapeEdit
 
         string _releaseDate = "";
         [XmlElement("releasedate")]
-        public string ReleaseDate 
-        { 
-            get { return _releaseDate; } 
-            set { _releaseDate = EncodeDateCodes(value); } 
+        public string ReleaseDate
+        {
+            get { return _releaseDate; }
+            set { _releaseDate = EncodeDateCodes(value); }
         }
-
 
         [XmlElement("developer")]
         public string Developer { get; set; }
@@ -223,20 +211,15 @@ namespace ScapeEdit
 
         [XmlElement("CRC")]
         public string CRC32 { get; set; }
-
         [XmlElement("MD5")]
         public string MD5 { get; set; }
-
         [XmlElement("SHA1")]
         public string SHA1 { get; set; }
-
         public bool HashMatch { get; set; } = false;
-
         public string NormalizePath(string path)
         {
             return path.Replace("./", "").Replace("/", "\\");
         }
-
         public string CreateGameListXML_Entry()
         {
             var serializer = new XmlSerializer(typeof(ScrapedGame));
@@ -262,7 +245,6 @@ namespace ScapeEdit
                 return stringWriter.ToString();
             }
         }
-
         string EncodeDateCodes(string formattedDate)
         {
             if (string.IsNullOrWhiteSpace(formattedDate))
@@ -306,7 +288,6 @@ namespace ScapeEdit
 
             return reply;
         }
-
         public ScrapedGame Clone(string relativePath)
         {
             return new ScrapedGame

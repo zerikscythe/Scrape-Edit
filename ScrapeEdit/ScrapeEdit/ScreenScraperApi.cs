@@ -65,10 +65,10 @@ namespace ScrapeEdit
             _sspassword = SessionSettings.Password;
         }
 
-        public string GenerateXmlData(TreeNodeDetail node, string userInputName = "", string userConsoleID = "", bool retry = false)//, string romtype = "rom", string romnom = null, long? romtaille = null)
+        public async Task<string> GenerateXmlDataAsync(TreeNodeDetail node, string userInputName = "", string userConsoleID = "", bool retry = false)
         {
             string originalFilePath = node.Tag_FullPath;
-            //string hash = "";
+
             if (!retry)
             {
                 if (ScrapeSettings.UseCRC32)
@@ -78,25 +78,21 @@ namespace ScrapeEdit
                 else if (ScrapeSettings.UseSHA1)
                     Hash.Compute_SHA1(node);
             }
+
             try
             {
-                var url = "";
-                if (!retry)
-                    url = GenerateUriFromFilename(node.FileName, node.Tag_ConsoleID);
-                else
-                {
-                    if (!string.IsNullOrEmpty(userInputName))
-                        url = GenerateUriFromFilename(userInputName, userConsoleID);
-                    else
-                        return null;
-                }
+                string url = string.IsNullOrEmpty(userInputName)
+                    ? GenerateUriFromFilename(node.FileName, node.Tag_ConsoleID)
+                    : GenerateUriFromFilename(userInputName, userConsoleID);
 
-                var response = httpClient.GetAsync(url).Result;
+                if (string.IsNullOrEmpty(url))
+                    return null;
 
-                response.EnsureSuccessStatusCode(); // Throws exception if the status code is not 2xx
-                string replyData = response.Content.ReadAsStringAsync().Result; 
-                return ObfuscateDevCredentials.Obfuscate(replyData); // Return the XML data obfuscated
+                using HttpResponseMessage response = await httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
 
+                string replyData = await response.Content.ReadAsStringAsync();
+                return ObfuscateDevCredentials.Obfuscate(replyData);
             }
             catch (HttpRequestException ex) when (ex.Message.Contains("404"))
             {
@@ -104,14 +100,7 @@ namespace ScrapeEdit
             }
             catch (Exception ex)
             {
-                if (retry == true)
-                {
-                    return null;
-                }
-                else
-                {
-                    return "400";
-                }
+                return retry ? null : "400";
             }
         }
 
